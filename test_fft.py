@@ -9,10 +9,11 @@ from scipy import signal
 sdr = RtlSdr()
 sdr.sample_rate = 2.4e6  # 2.4 MHz
 sdr.center_freq = 160270968 # MHz
-sdr.gain = 'auto'
+
+sdr.gain = 10
 
 # Number of samples to read in each iteration
-samples_to_process = 1.e5
+samples_to_process = 1024e2
 threshold = 0.6
 freq_offset = -43.8e4 #Hz
 
@@ -23,6 +24,7 @@ index = 0
 time_between_rising_edge = 0
 rssi = 0
 pulse_width = 0
+
 
 def process_samples(samples, sample_rate, freq_offset, threshold):
 
@@ -45,14 +47,15 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     max_samp = np.max(samples)
     samples /= np.max(samples)
 
-    # plt.plot(samples)
-    # plt.show()
+    plt.plot(samples)
+    plt.show()
 
     def islow(v):
         return v < threshold
     def ishigh(v):
         return v >= threshold
 
+    # do nothing if no signals above threshold
     if np.max(samples) < threshold:
         return
     
@@ -75,21 +78,16 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
             print(f"rssi : {rssi}")
         last = n
     index = index + len(samples)
-                
+
+
+
 try:
     while True:
-        # Read a chunk of samples
-        # samples_to_process is number of samples to process
-        samples = sdr.read_samples(samples_to_process)
-
-        # # use matplotlib to estimate and plot the PSD
-        # psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
-        # xlabel('Frequency (MHz)')
-        # ylabel('Relative power (dB)')
-        # show()
-
-        # Process the samples
-        processed_data = process_samples(samples, sdr.sample_rate, freq_offset, threshold)
+        main_array = np.array([])
+        if len(main_array) < 1024e2:
+            samples = sdr.read_samples(samples_to_process)
+            main_array = np.concatenate((main_array, samples))
+        processed_data = process_samples(main_array, sdr.sample_rate, freq_offset, threshold)
 
 except KeyboardInterrupt:
     # Stop the loop on keyboard interrupt
