@@ -9,32 +9,14 @@ from scipy import signal
 sdr = RtlSdr()
 sdr.sample_rate = 2.4e6  # 2.4 MHz
 sdr.center_freq = 160270968 # MHz
-
-sdr.gain = 10
+sdr.gain = 50000
 
 # Number of samples to read in each iteration
-samples_to_process = 1024e2
-threshold = 0.6
+samples_to_process = 4.8e6
+threshold = 0.9
 freq_offset = -43.8e4 #Hz
 
-lastfalling = 0
-last = 0
-lastrise = 0
-index = 0
-time_between_rising_edge = 0
-rssi = 0
-pulse_width = 0
-
-
 def process_samples(samples, sample_rate, freq_offset, threshold):
-
-    global index
-    global lastrise
-    global last
-    global lastfalling
-    global time_between_rising_edge
-    global rssi
-    global pulse_width
 
     t = np.arange(len(samples))/sample_rate
     samples = samples * np.exp(2j*np.pi*t*freq_offset)
@@ -45,49 +27,62 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     samples = np.abs(samples)
     samples = np.convolve(samples, [1]*10, 'valid')/10
     max_samp = np.max(samples)
-    samples /= np.max(samples)
-
-    plt.plot(samples)
-    plt.show()
-
-    def islow(v):
-        return v < threshold
-    def ishigh(v):
-        return v >= threshold
-
-    # do nothing if no signals above threshold
-    if np.max(samples) < threshold:
-        return
+    # samples /= np.max(samples)
+    print(f"max sample : {max_samp}")
+    #plt.plot(samples)
+    #plt.show()
     
-    # samples array index(j), value(n) 
-    for j,n in enumerate(samples):
-        i = index + j
-        # i = j        
-        # Is this a rising edge?
-        if ishigh(n) and islow(last):
-            # then check is second rising edge? i.e. lastrise!=0
-            if lastrise:
-                time_between_rising_edge = round(sample_rate/(i-lastrise)*60,2)
-                print(f"BPM: {time_between_rising_edge}")
-            lastrise = i
-        # Is this a falling edge?
-        elif islow(n) and ishigh(last):
-            pulse_width =  round((i-lastrise)/sample_rate,4)
-            lastfalling = i      
-            rssi = round(np.mean(samples[j-(i-lastrise):j]) * max_samp,2)
-            print(f"rssi : {rssi}")
-        last = n
-    index = index + len(samples)
+    # Get a boolean array for all samples higher or lower than the threshold
+    low_samples = samples < threshold
+    high_samples = samples >= threshold
 
+    # Compute the rising edge and falling edges by comparing the current value to the next with
+    # the boolean operator & (if both are true the result is true) and converting this to an index
+    # into the current array
+    rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+    falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
+    # This would need to be handled more gracefully with a stateful
+    # processing (e.g. saving samples at the end if the pulse is in-between two processing blocks)
+    # Remove stray falling edge at the start
+    if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+        return
+    print(f"passed len test for idx's")
+    if rising_edge_idx[0] > falling_edge_idx[0]:
+        falling_edge_idx = falling_edge_idx[1:]
+
+    # Remove stray rising edge at the end
+    if rising_edge_idx[-1] > falling_edge_idx[-1]:
+        rising_edge_idx = rising_edge_idx[:-1]
+
+    rising_edge_diff = np.diff(rising_edge_idx)
+    time_between_rising_edge = sample_rate / rising_edge_diff * 60
+
+    pulse_widths = falling_edge_idx - rising_edge_idx
+    rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
+    rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
+
+    for t, r in zip(time_between_rising_edge, rssi):
+        print(f"BPM: {t:.02f}")
+        print(f"rssi: {r:.02f}")
 
 try:
     while True:
-        main_array = np.array([])
-        if len(main_array) < 1024e2:
-            samples = sdr.read_samples(samples_to_process)
-            main_array = np.concatenate((main_array, samples))
-        processed_data = process_samples(main_array, sdr.sample_rate, freq_offset, threshold)
+        # Read a chunk of samples
+        # samples_to_process is number of samples to process
+        #start = time.time()
+        samples = sdr.read_samples(samples_to_process)
+        #print(f"finish : {time.time()-start}")
+
+        # use matplotlib to estimate and plot the PSD
+        #psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
+        #xlabel('Frequency (MHz)')
+        #ylabel('Relative power (dB)')
+        #show()
+
+        # Process the samples
+
+        processed_data = process_samples(samples, sdr.sample_rate, freq_offset, threshold)
 
 except KeyboardInterrupt:
     # Stop the loop on keyboard interrupt
@@ -96,4 +91,3 @@ except KeyboardInterrupt:
 finally:
     # Close the RTL-SDR device
     sdr.close()
-
