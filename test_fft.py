@@ -18,6 +18,20 @@ freq_offset = -43.8e4 #Hz
 
 def process_samples(samples, sample_rate, freq_offset, threshold):
 
+    beep_duration = 0.017 # seconds
+    fft_size = int(beep_duration * sample_rate / 2) # this makes sure there's at least 1 full chunk within each beep
+    f = np.linspace(sample_rate/-2, sample_rate/2, fft_size)
+    num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+    fft_thresh = 0.1
+    beep_freqs = []
+    for i in range(num_ffts):
+        fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+        if np.max(fft) > fft_thresh:
+            beep_freqs.append(np.linspace(sample_rate/-2, sample_rate/2, fft_size)[np.argmax(fft)])
+        plt.plot(f,fft)
+    print(beep_freqs)
+    plt.show()
+
     t = np.arange(len(samples))/sample_rate
     samples = samples * np.exp(2j*np.pi*t*freq_offset)
     h = signal.firwin(501, 0.02, pass_zero=True)
