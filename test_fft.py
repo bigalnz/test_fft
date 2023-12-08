@@ -9,14 +9,19 @@ from scipy import signal
 sdr = RtlSdr()
 sdr.sample_rate = 2.4e6  # 2.4 MHz
 sdr.center_freq = 160270968 # MHz
-sdr.gain = 50000
+sdr.gain = 445
 
 # Number of samples to read in each iteration
-samples_to_process = 4.8e6
+#samples_to_process = 4.8e6
+samples_to_process = 1.024e6
 threshold = 0.9
 freq_offset = -43.8e4 #Hz
 
+stateful_index = 0
+
 def process_samples(samples, sample_rate, freq_offset, threshold):
+
+    global stateful_index
 
     beep_duration = 0.017 # seconds
     fft_size = int(beep_duration * sample_rate / 2) # this makes sure there's at least 1 full chunk within each beep
@@ -29,8 +34,8 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
         if np.max(fft) > fft_thresh:
             beep_freqs.append(np.linspace(sample_rate/-2, sample_rate/2, fft_size)[np.argmax(fft)])
         plt.plot(f,fft)
-    print(beep_freqs)
-    plt.show()
+    #print(beep_freqs)
+    #plt.show()
 
     t = np.arange(len(samples))/sample_rate
     samples = samples * np.exp(2j*np.pi*t*freq_offset)
@@ -42,7 +47,7 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     samples = np.convolve(samples, [1]*10, 'valid')/10
     max_samp = np.max(samples)
     # samples /= np.max(samples)
-    print(f"max sample : {max_samp}")
+    #print(f"max sample : {max_samp}")
     #plt.plot(samples)
     #plt.show()
     
@@ -61,7 +66,7 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     # Remove stray falling edge at the start
     if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
         return
-    print(f"passed len test for idx's")
+    #print(f"passed len test for idx's")
     if rising_edge_idx[0] > falling_edge_idx[0]:
         falling_edge_idx = falling_edge_idx[1:]
 
@@ -79,12 +84,15 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     for t, r in zip(time_between_rising_edge, rssi):
         print(f"BPM: {t:.02f}")
         print(f"rssi: {r:.02f}")
+    stateful_index += len(samples)
+    print(f"stateful index : {stateful_index}")
 
 try:
     while True:
         # Read a chunk of samples
         # samples_to_process is number of samples to process
         #start = time.time()
+    
         samples = sdr.read_samples(samples_to_process)
         #print(f"finish : {time.time()-start}")
 
