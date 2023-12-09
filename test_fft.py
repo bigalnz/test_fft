@@ -1,4 +1,5 @@
 from typing import Self, TYPE_CHECKING
+import threading
 import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
@@ -16,6 +17,13 @@ if TYPE_CHECKING:
 SamplesT = npt.NDArray[np.complex128]
 """Alias for sample arrays"""
 
+
+
+class QueueEmpty(Exception):
+    """Raised by SampleBuffer.get/get_nowait"""
+
+class QueueFull(Exception):
+    """Raised by SampleBuffer.put/put_nowait"""
 
 
 class SampleReader:
@@ -94,6 +102,110 @@ class SampleReader:
 
     def __exit__(self, *args):
         self.close()
+
+
+class SampleBuffer:
+    """Buffer for samples with thread-safe reads and writes
+
+    Behavior is similar to :class:`queue.Queue`, with the exception of
+    the ``task_done()`` and ``join()`` methods (which are not present).
+    """
+
+    maxsize: int
+    """The maximum length for the buffer. If less than or equal to zero, the
+    buffer length is infinite
+    """
+
+    def __init__(self, maxsize: int = 0) -> None:
+        self.maxsize = maxsize
+        self._samples: SamplesT = np.zeros(0, dtype=np.complex128)
+        self._lock: threading.RLock = threading.RLock()
+        self._notify_w = threading.Condition(self._lock)
+        self._notify_r = threading.Condition(self._lock)
+
+    def put(self, samples: SamplesT, timeout: float|None = None):
+        """Append new samples to the end of the buffer, blocking if necessary
+
+        If *timeout* is given, waits for at most *timeout* seconds for enough
+        available room on the buffer to write the samples.
+        Otherwise, waits indefinitely.
+
+        Raises:
+            QueueFull: If a timeout occurs waiting for available write space
+        """
+        with self._lock:
+            new_size = len(self) + samples.size
+            if self.maxsize > 0 and new_size > self.maxsize:
+                def can_write():
+                    return new_size <= self.maxsize
+                r = self._notify_w.wait_for(can_write, timeout=timeout)
+                if not r:
+                    raise QueueFull()
+            self._samples = np.concatenate((self._samples, samples))
+            self._notify_r.notify_all()
+
+    def put_nowait(self, samples: SamplesT):
+        """Immediately append new samples to the end of the buffer
+
+        Raises:
+            QueueFull: If not enough write space is available
+        """
+        with self._lock:
+            new_size = len(self) + samples.size
+            if self.maxsize > 0 and new_size > self.maxsize:
+                raise QueueFull()
+            self._samples = np.concatenate((self._samples, samples))
+            self._notify_r.notify_all()
+
+    def get(self, count: int, timeout: float|None = None) -> SamplesT:
+        """Get *count* number of samples and remove them from the buffer
+
+        If *timeout* is given, waits at most *timeout* seconds for enough
+        samples to be written. Otherwise, waits indefinitely.
+
+        Raises:
+            QueueEmpty: If a timeout occurs waiting for samples
+        """
+        def has_enough_samples():
+            return len(self) >= count
+
+        with self._lock:
+            if not has_enough_samples():
+                r = self._notify_r.wait_for(has_enough_samples, timeout=timeout)
+                if not r:
+                    raise QueueEmpty()
+            samples = self._samples[:count]
+            self._samples = self._samples[count:]
+            self._notify_w.notify_all()
+            return samples
+
+    def get_nowait(self, count: int) -> SamplesT:
+        """Get *count* number of samples and remove them from the buffer
+
+        Raises:
+            QueueEmpty: If there aren't enough samples
+        """
+        with self._lock:
+            if len(self) < count:
+                raise QueueEmpty()
+            samples = self._samples[:count]
+            self._samples = self._samples[count:]
+            self._notify_w.notify_all()
+            return samples
+
+    def qsize(self) -> int:
+        return len(self)
+
+    def empty(self) -> bool:
+        return len(self) == 0
+
+    def full(self) -> bool:
+        if self.maxsize > 0:
+            return len(self) >= self.maxsize
+        return False
+
+    def __len__(self) -> int:
+        return self._samples.size
 
 
 class SampleProcessor:
