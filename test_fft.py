@@ -32,6 +32,15 @@ class SampleReader:
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
+    @property
+    def gain_values_db(self) -> list[float]:
+        """List of possible values for :attr:`gain` in dB
+        (instead of "tenths of dB")
+        """
+        if self.sdr is None:
+            raise RuntimeError('SampleReader not open')
+        return [v / 10 for v in self.sdr.gain_values]
+
     def read_samples(self) -> npt.NDArray[np.complex128]:
         """Read :attr:`num_samples` from the device
         """
@@ -61,6 +70,10 @@ class SampleReader:
         self.sample_rate = sdr.sample_rate
         self.center_freq = sdr.center_freq
         self.gain = sdr.gain
+
+        # NOTE: Just for debug purposes. This might help with your gain issue
+        print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
+        print(f'{self.gain_values_db=}')
 
     def close(self):
         """Close the device if it's currently open
