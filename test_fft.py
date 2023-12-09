@@ -33,7 +33,7 @@ class SampleReader:
     gain: float|str = 44.5
     """gain in dB"""
 
-    num_samples: int = int(1.024e6)
+    num_samples: int = 16384
     """Number of samples to read in each iteration"""
 
     sdr: RtlSdr|None = None
@@ -213,6 +213,9 @@ class SampleProcessor:
     freq_offset: float = -43.8e4 #Hz
     beep_duration: float = 0.017 # seconds
 
+    num_samples_to_process: int = int(1.024e6)
+    """Number of samples needed to process"""
+
     sample_rate: float
     stateful_index: int
 
@@ -224,6 +227,12 @@ class SampleProcessor:
     def fft_size(self) -> int:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
+
+    def process_from_buffer(self, buffer: SampleBuffer):
+        """Wait for enough samples on the buffer, then process them
+        """
+        samples = buffer.get(self.num_samples_to_process)
+        self.process(samples)
 
     def process(self, samples: SamplesT):
         fft_size = self.fft_size
@@ -290,33 +299,56 @@ class SampleProcessor:
         print(f"stateful index : {self.stateful_index}")
 
 
+class ReaderThread(threading.Thread):
+    """Continuously read samples on a separate thread and place them on the buffer
+    """
+    reader: SampleReader
+    buffer: SampleBuffer
+    write_timeout: float = 1
+    def __init__(self, reader: SampleReader, buffer: SampleBuffer) -> None:
+        super().__init__()
+        self.reader = reader
+        self.buffer = buffer
+        self.running: bool = False
+        self._stopped = threading.Event()
+
+    def run(self):
+        self.running = True
+        try:
+            with self.reader:
+                while self.running:
+                    samples = self.reader.read_samples()
+                    try:
+                        self.buffer.put(samples, timeout=1)
+                    except QueueFull:
+                        print('Sample buffer overflow')
+        finally:
+            self._stopped.set()
+
+    def stop(self):
+        if not self.running:
+            return
+        self.running = False
+        self._stopped.wait()
+
+
 
 # NOTE: Always better to run things within a main function
 def main():
-    with SampleReader() as reader:
-        processor = SampleProcessor(reader.sample_rate)
-        try:
-            while True:
-                # Read a chunk of samples
-                # samples_to_process is number of samples to process
-                #start = time.time()
+    reader = SampleReader()
+    processor = SampleProcessor(reader.sample_rate)
+    buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
 
-                samples = reader.read_samples()
-                #print(f"finish : {time.time()-start}")
-
-                # use matplotlib to estimate and plot the PSD
-                #psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
-                #xlabel('Frequency (MHz)')
-                #ylabel('Relative power (dB)')
-                #show()
-
-                # Process the samples
-                processor.process(samples)
-
-        except KeyboardInterrupt:
-            # Stop the loop on keyboard interrupt
-            print("Program terminated.")
-            return
+    reader_thread = ReaderThread(reader, buffer)
+    reader_thread.start()
+    try:
+        while True:
+            processor.process_from_buffer(buffer)
+    except KeyboardInterrupt:
+        print('Closing...')
+        reader_thread.stop()
+        print('Closed')
+        return
 
 
 # NOTE: This only calls main() above ONLY when the script is being executed
