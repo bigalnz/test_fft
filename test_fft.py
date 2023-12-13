@@ -6,36 +6,42 @@ import time
 from scipy import signal
 
 # Configure RTL-SDR parameters
-sdr = RtlSdr()
-sdr.sample_rate = 2.4e6  # 2.4 MHz
-sdr.center_freq = 160270968 # MHz
-sdr.gain = 445
+#sdr = RtlSdr()
+#sdr.sample_rate = 2.40e6  # 2.4 MHz
+#sdr.center_freq = 160270968 # Hz
+#print(sdr.gain_values)
+
+# sdr.gain = 166
 
 # Number of samples to read in each iteration
 #samples_to_process = 4.8e6
-samples_to_process = 1.024e6
-threshold = 0.9
+samples_to_process = 1.024e5
+#samples_to_process = 24e6
+threshold = 0.7
 freq_offset = -43.8e4 #Hz
+# freq_offset = -16.88e4
 
 stateful_index = 0
+stateful_rising_edge = 0
 
 def process_samples(samples, sample_rate, freq_offset, threshold):
 
     global stateful_index
+    global stateful_rising_edge
 
-    beep_duration = 0.017 # seconds
-    fft_size = int(beep_duration * sample_rate / 2) # this makes sure there's at least 1 full chunk within each beep
-    f = np.linspace(sample_rate/-2, sample_rate/2, fft_size)
-    num_ffts = len(samples) // fft_size # // is an integer division which rounds down
-    fft_thresh = 0.1
-    beep_freqs = []
-    for i in range(num_ffts):
-        fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-        if np.max(fft) > fft_thresh:
-            beep_freqs.append(np.linspace(sample_rate/-2, sample_rate/2, fft_size)[np.argmax(fft)])
-        plt.plot(f,fft)
-    #print(beep_freqs)
-    #plt.show()
+    # beep_duration = 0.017 # seconds
+    # fft_size = int(beep_duration * sample_rate / 2) # this makes sure there's at least 1 full chunk within each beep
+    # f = np.linspace(sample_rate/-2, sample_rate/2, fft_size)
+    # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+    # fft_thresh = 0.1
+    # beep_freqs = []
+    # for i in range(num_ffts):
+    #     fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+    #     if np.max(fft) > fft_thresh:
+    #         beep_freqs.append(np.linspace(sample_rate/-2, sample_rate/2, fft_size)[np.argmax(fft)])
+    #     plt.plot(f,fft)
+    # # print(beep_freqs)
+    # # plt.show()
 
     t = np.arange(len(samples))/sample_rate
     samples = samples * np.exp(2j*np.pi*t*freq_offset)
@@ -47,9 +53,9 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     samples = np.convolve(samples, [1]*10, 'valid')/10
     max_samp = np.max(samples)
     # samples /= np.max(samples)
-    #print(f"max sample : {max_samp}")
-    #plt.plot(samples)
-    #plt.show()
+    # print(f"max sample : {max_samp}")
+    # plt.plot(samples)
+    # plt.show()
     
     # Get a boolean array for all samples higher or lower than the threshold
     low_samples = samples < threshold
@@ -63,10 +69,12 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
 
     # This would need to be handled more gracefully with a stateful
     # processing (e.g. saving samples at the end if the pulse is in-between two processing blocks)
-    # Remove stray falling edge at the start
-    if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+
+    if rising_edge_idx.size == 0 or falling_edge_idx.size == 0:
+        stateful_index += samples.size + 10
         return
-    #print(f"passed len test for idx's")
+
+    # Remove stray falling edge at the start
     if rising_edge_idx[0] > falling_edge_idx[0]:
         falling_edge_idx = falling_edge_idx[1:]
 
@@ -77,15 +85,34 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     rising_edge_diff = np.diff(rising_edge_idx)
     time_between_rising_edge = sample_rate / rising_edge_diff * 60
 
-    pulse_widths = falling_edge_idx - rising_edge_idx
-    rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
-    rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
+    # pulse_widths = falling_edge_idx - rising_edge_idx
+    # rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
+    # rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
 
-    for t, r in zip(time_between_rising_edge, rssi):
-        print(f"BPM: {t:.02f}")
-        print(f"rssi: {r:.02f}")
-    stateful_index += len(samples)
-    print(f"stateful index : {stateful_index}")
+    # for t, r in zip(time_between_rising_edge, rssi):
+    #     print(f"BPM: {t:.02f}")
+    #     print(f"rssi: {r:.02f}")
+    
+    # if rising edge index has a value then add it to running
+    # stateful index total
+    # stateful_time_between = 0
+    # if rising_edge_idx.size:
+    #     if stateful_rising_edge.size:
+    #         stateful_time_between = sample_rate / ((stateful_index + rising_edge_idx) - stateful_rising_edge) * 60
+    #    stateful_rising_edge = stateful_index + rising_edge_idx
+
+    samples_between =  (rising_edge_idx[0]+stateful_index) - stateful_rising_edge
+    time_between = 1/sample_rate * samples_between
+    pulse_per_minute = 60 / time_between
+    stateful_rising_edge = stateful_index + rising_edge_idx[0]
+    print(f"samples between : {samples_between}")
+    print(f" pps : {pulse_per_minute}")
+
+    # increment sample count    
+    stateful_index += samples.size + 10
+    # print(f"stateful index : {stateful_index}")
+    # print(f"stateful rising edge : {stateful_rising_edge}")
+    # print(f"stateful time between : {stateful_time_between}")
 
 try:
     while True:
@@ -93,23 +120,36 @@ try:
         # samples_to_process is number of samples to process
         #start = time.time()
     
-        samples = sdr.read_samples(samples_to_process)
+        #samples = sdr.read_samples(samples_to_process)
+
+        #print(f"samples to process length : {samples.size}")
+        #with open('samples.npy', 'wb') as f:
+        #    np.save(f, samples)
         #print(f"finish : {time.time()-start}")
+        with open('samples.npy', 'r'):
+            samples_from_file = np.load('samples.npy')
+            print(f"size from file : {samples_from_file.size}")
+
+        for i in range(0, samples_from_file.size):
+            i = i * 1024000
+            samples = samples_from_file[i:i+1024000]
 
         # use matplotlib to estimate and plot the PSD
-        #psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
-        #xlabel('Frequency (MHz)')
-        #ylabel('Relative power (dB)')
-        #show()
+        # psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
+        # xlabel('Frequency (MHz)')
+        # ylabel('Relative power (dB)')
+        # show()
 
         # Process the samples
 
-        processed_data = process_samples(samples, sdr.sample_rate, freq_offset, threshold)
+            #processed_data = process_samples(samples, sdr.sample_rate, freq_offset, threshold)
+            sample_rate = 2.4e6
+            processed_data = process_samples(samples, sample_rate, freq_offset, threshold)
 
 except KeyboardInterrupt:
     # Stop the loop on keyboard interrupt
     print("Program terminated.")
 
-finally:
+# finally:
     # Close the RTL-SDR device
-    sdr.close()
+    # sdr.close()
