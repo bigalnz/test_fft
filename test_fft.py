@@ -5,7 +5,7 @@ from pylab import *
 import time
 from scipy import signal
 
-# Configure RTL-SDR parameters
+# Configure RTL-SDR parameters for pyrtlsdr
 #sdr = RtlSdr()
 #sdr.sample_rate = 2.40e6  # 2.4 MHz
 #sdr.center_freq = 160270968 # Hz
