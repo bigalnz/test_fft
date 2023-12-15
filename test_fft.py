@@ -346,8 +346,8 @@ def main():
         assert args.outfile is not None
         assert args.max_samples is not None
         run_readonly(args.outfile, args.max_samples)
-    else:
-        run_main(args.outfile, args.max_samples)
+    # else:
+    #     run_main(args.outfile, args.max_samples)
 
 def run_readonly(outfile: str, max_samples: int):
     samples = np.zeros(0, dtype=np.complex128)
