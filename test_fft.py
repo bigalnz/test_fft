@@ -338,11 +338,14 @@ class ReaderThread(threading.Thread):
 # NOTE: Always better to run things within a main function
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--from-file', dest='infile')
     p.add_argument('--read-only', dest='read_only', action='store_true')
     p.add_argument('-o', '--outfile', dest='outfile')
     p.add_argument('--max-samples', dest='max_samples', type=int)
     args = p.parse_args()
-    if args.read_only:
+    if args.infile is not None:
+        run_from_disk(args.infile)
+    elif args.read_only:
         assert args.outfile is not None
         assert args.max_samples is not None
         run_readonly(args.outfile, args.max_samples)
@@ -359,6 +362,11 @@ def run_readonly(outfile: str, max_samples: int):
             samples = np.concatenate((samples, _samples))
         processor.process(samples)
     np.save(outfile, samples)
+
+def run_from_disk(filename):
+    samples = np.load(filename)
+    processor = SampleProcessor(SampleReader.sample_rate)
+    processor.process(samples)
 
 def run_main(outfile: str|None, max_samples: int|None):
     reader = SampleReader()
