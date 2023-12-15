@@ -349,8 +349,8 @@ def main():
         assert args.outfile is not None
         assert args.max_samples is not None
         run_readonly(args.outfile, args.max_samples)
-    # else:
-    #     run_main(args.outfile, args.max_samples)
+    else:
+        run_main()
 
 def run_readonly(outfile: str, max_samples: int):
     samples = np.zeros(0, dtype=np.complex128)
@@ -368,24 +368,16 @@ def run_from_disk(filename):
     processor = SampleProcessor(SampleReader.sample_rate)
     processor.process(samples)
 
-def run_main(outfile: str|None, max_samples: int|None):
+def run_main():
     reader = SampleReader()
     processor = SampleProcessor(reader.sample_rate)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
-
-    samples = np.zeros(0, dtype=np.complex128)
 
     reader_thread = ReaderThread(reader, buffer)
     reader_thread.start()
     try:
         while True:
             _samples = processor.process_from_buffer(buffer)
-            if outfile is not None:
-                samples = np.concatenate((samples, _samples))
-                if max_samples is not None and samples.size >= max_samples:
-                    break
-        if outfile is not None:
-            np.save(outfile, samples)
     except KeyboardInterrupt:
         print('Closing...')
         reader_thread.stop()
