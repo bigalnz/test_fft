@@ -352,11 +352,12 @@ def main():
 def run_readonly(outfile: str, max_samples: int):
     samples = np.zeros(0, dtype=np.complex128)
     reader = SampleReader()
+    processor = SampleProcessor(reader.sample_rate)
     with reader:
         while samples.size < max_samples:
             _samples = reader.read_samples()
             samples = np.concatenate((samples, _samples))
-
+        processor.process(samples)
     np.save(outfile, samples)
 
 def run_main(outfile: str|None, max_samples: int|None):
