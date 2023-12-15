@@ -1,4 +1,5 @@
 from typing import Self, TYPE_CHECKING
+import argparse
 import threading
 import numpy as np
 import numpy.typing as npt
@@ -228,11 +229,12 @@ class SampleProcessor:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
 
-    def process_from_buffer(self, buffer: SampleBuffer):
+    def process_from_buffer(self, buffer: SampleBuffer) -> SamplesT:
         """Wait for enough samples on the buffer, then process them
         """
         samples = buffer.get(self.num_samples_to_process)
         self.process(samples)
+        return samples
 
     def process(self, samples: SamplesT):
         fft_size = self.fft_size
@@ -335,15 +337,46 @@ class ReaderThread(threading.Thread):
 
 # NOTE: Always better to run things within a main function
 def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('--read-only', dest='read_only', action='store_true')
+    p.add_argument('-o', '--outfile', dest='outfile')
+    p.add_argument('--max-samples', dest='max_samples', type=int)
+    args = p.parse_args()
+    if args.read_only:
+        assert args.outfile is not None
+        assert args.max_samples is not None
+        run_readonly(args.outfile, args.max_samples)
+    else:
+        run_main(args.outfile, args.max_samples)
+
+def run_readonly(outfile: str, max_samples: int):
+    samples = np.zeros(0, dtype=np.complex128)
+    reader = SampleReader()
+    with reader:
+        while samples.size < max_samples:
+            _samples = reader.read_samples()
+            samples = np.concatenate((samples, _samples))
+
+    np.save(outfile, samples)
+
+def run_main(outfile: str|None, max_samples: int|None):
     reader = SampleReader()
     processor = SampleProcessor(reader.sample_rate)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
+
+    samples = np.zeros(0, dtype=np.complex128)
 
     reader_thread = ReaderThread(reader, buffer)
     reader_thread.start()
     try:
         while True:
-            processor.process_from_buffer(buffer)
+            _samples = processor.process_from_buffer(buffer)
+            if outfile is not None:
+                samples = np.concatenate((samples, _samples))
+                if max_samples is not None and samples.size >= max_samples:
+                    break
+        if outfile is not None:
+            np.save(outfile, samples)
     except KeyboardInterrupt:
         print('Closing...')
         reader_thread.stop()
