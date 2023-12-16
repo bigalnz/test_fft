@@ -1,5 +1,7 @@
 from typing import Self, TYPE_CHECKING
 import argparse
+import asyncio
+import concurrent.futures
 import threading
 import numpy as np
 import numpy.typing as npt
@@ -40,9 +42,21 @@ class SampleReader:
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
+    aio_qsize: int = 6000
+
     def __init__(self, sample_rate: float = 2.4e6, num_samples: int = 16384):
         self.sample_rate = sample_rate
         self.num_samples = num_samples
+        self._running_sync = False
+        self._running_async = False
+        self.aio_queue: asyncio.Queue[SamplesT|None] = asyncio.Queue(maxsize=self.aio_qsize)
+        self._read_future: asyncio.Future|None = None
+        self._aio_streaming = False
+        self._aio_loop: asyncio.AbstractEventLoop|None = None
+        self._callback_tasks: set[asyncio.Task] = set()
+        self._callback_futures: set[concurrent.futures.Future] = set()
+        self._wrapped_futures: set[asyncio.Future] = set()
+        self._cleanup_task: asyncio.Task|None = None
 
     @property
     def gain_values_db(self) -> list[float]:
@@ -56,6 +70,7 @@ class SampleReader:
     def read_samples(self) -> SamplesT:
         """Read :attr:`num_samples` from the device
         """
+        self._ensure_sync()
         if self.sdr is None:
             raise RuntimeError('SampleReader not open')
         samples = self.sdr.read_samples(self.num_samples)
@@ -65,9 +80,107 @@ class SampleReader:
             assert isinstance(samples, np.ndarray)
         return samples
 
+    async def open_stream(self):
+        self._ensure_async()
+        if self.sdr is None:
+            raise RuntimeError('SampleReader not open')
+        assert self._read_future is None
+        loop = asyncio.get_running_loop()
+        self._aio_loop = loop
+        self._aio_streaming = True
+        fut = loop.run_in_executor(
+            None,
+            self.sdr.read_samples_async,
+            self._async_callback
+        )
+        self._read_future = asyncio.ensure_future(fut)
+        self._cleanup_task = asyncio.create_task(self._bg_task_loop())
+
+    async def close_stream(self):
+        if not self._aio_streaming:
+            return
+        self._aio_streaming = False
+        if self.sdr is not None:
+            self.sdr.cancel_read_async()
+        t = self._cleanup_task
+        self._cleanup_task = None
+        if t is not None:
+            await t
+        t = self._read_future
+        self._read_future = None
+        if t is not None:
+            await t
+        while self.aio_queue.qsize() > 0:
+            try:
+                _ = self.aio_queue.get_nowait()
+                self.aio_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+        await self.aio_queue.put(None)
+        self._wrap_futures()
+        if len(self._wrapped_futures):
+            await asyncio.gather(*self._wrapped_futures)
+
+
+    def _async_callback(self, samples: SamplesT, *args):
+        if not self._aio_streaming:
+            return
+
+        async def add_to_queue(samples: SamplesT):
+            try:
+                self.aio_queue.put_nowait(samples)
+            except asyncio.QueueFull:
+                print(f'buffer overrun: {self.aio_queue.qsize()=}')
+        if self._aio_loop is None:
+            return
+        fut = asyncio.run_coroutine_threadsafe(
+            add_to_queue(samples),
+            self._aio_loop,
+        )
+        self._callback_futures.add(fut)
+
+    def _wrap_futures(self):
+        fut: concurrent.futures.Future
+        for fut in self._callback_futures.copy():
+            self._wrapped_futures.add(asyncio.wrap_future(fut))
+            self._callback_futures.discard(fut)
+
+    async def _wait_for_futures(self, timeout: float = .01):
+        done: set[asyncio.Future]
+        done, pending = await asyncio.wait(
+            self._wrapped_futures,
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for fut in done:
+            self._wrapped_futures.discard(fut)
+
+    async def _bg_task_loop(self):
+        while self._aio_streaming:
+            self._wrap_futures()
+            if len(self._wrapped_futures):
+                await self._wait_for_futures()
+            if not len(self._wrapped_futures) and not len(self._callback_futures):
+                await asyncio.sleep(.1)
+
+
+    def _ensure_sync(self):
+        if self._running_async:
+            raise RuntimeError('Currently in async mode')
+
+    def _ensure_async(self):
+        if self._running_sync:
+            raise RuntimeError('Currently in sync mode')
+
     def open(self):
         """Open the device and set all necessary parameters
         """
+        self._ensure_sync()
+        self._running_sync = True
+        self._open()
+
+    def _open(self):
         assert self.sdr is None
         if TYPE_CHECKING:
             # NOTE: Another workaround for the above TYPE_CHECKING stuff
@@ -90,11 +203,29 @@ class SampleReader:
     def close(self):
         """Close the device if it's currently open
         """
+        self._ensure_sync()
+        self._close()
+        self._running_sync = False
+
+    def _close(self):
         sdr = self.sdr
         if sdr is None:
             return
         self.sdr = None
         sdr.close()
+
+    async def aopen(self):
+        self._ensure_async()
+        self._running_async = True
+        self._open()
+
+    async def aclose(self):
+        self._ensure_async()
+        try:
+            await self.close_stream()
+        finally:
+            self._close()
+        self._running_async = False
 
     # NOTE: These two methods allow use as a context manager:
     #       with SampleReader() as reader:
@@ -107,6 +238,26 @@ class SampleReader:
 
     def __exit__(self, *args):
         self.close()
+
+    async def __aenter__(self) -> Self:
+        await self.aopen()
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    async def __anext__(self) -> SamplesT:
+        if not self._aio_streaming:
+            raise StopAsyncIteration
+        samples = await self.aio_queue.get()
+        self.aio_queue.task_done()
+        if samples is None:
+            raise StopAsyncIteration
+        return samples
+
+    def __aiter__(self):
+        return self
+
 
 
 class SampleBuffer:
@@ -344,6 +495,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--from-file', dest='infile')
     p.add_argument('--read-only', dest='read_only', action='store_true')
+    p.add_argument('-a', '--async-mode', dest='async_mode', action='store_true')
     p.add_argument('-o', '--outfile', dest='outfile')
     p.add_argument(
         '-c', '--chunk-size',
@@ -360,6 +512,12 @@ def main():
         assert args.outfile is not None
         assert args.max_samples is not None
         run_readonly(args.outfile, args.chunk_size, args.max_samples)
+    elif args.async_mode:
+        assert args.outfile is not None
+        assert args.max_samples is not None
+        asyncio.run(
+            run_readonly_async(args.outfile, args.chunk_size, args.max_samples)
+        )
     else:
         run_main()
 
@@ -373,6 +531,39 @@ def run_readonly(outfile: str, chunk_size: int, max_samples: int):
             samples = np.concatenate((samples, _samples))
         processor.process(samples)
     np.save(outfile, samples)
+
+async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
+    samples = np.zeros(max_samples, dtype=np.complex128)
+    reader = SampleReader(num_samples=chunk_size)
+    processor = SampleProcessor(reader.sample_rate)
+
+    async with reader:
+        await reader.open_stream()
+        i = 0
+        count = 0
+        start_ix = 0
+        async for _samples in reader:
+            assert start_ix < max_samples
+            size = _samples.size
+            end_ix = start_ix + size
+
+            if end_ix > max_samples:
+                size = max_samples - start_ix
+                samples[start_ix:] = _samples[:size]
+            else:
+                samples[start_ix:end_ix] = _samples
+            count += size
+            # if count % 100 == 0:
+            #     print(f'{i}\t{reader.aio_queue.qsize()=}\t{size=}\t{start_ix=}\t{end_ix=}\t{count=}')
+            start_ix = end_ix
+            i += 1
+            if count >= max_samples:
+                break
+
+        await reader.close_stream()
+    processor.process(samples)
+    np.save(outfile, samples)
+
 
 def run_from_disk(filename):
     samples = np.load(filename)
