@@ -93,7 +93,8 @@ class SampleReader:
         fut = loop.run_in_executor(
             None,
             self.sdr.read_samples_async,
-            self._async_callback
+            self._async_callback,
+            self.num_samples,
         )
         self._read_future = asyncio.ensure_future(fut)
         self._cleanup_task = asyncio.create_task(self._bg_task_loop())
