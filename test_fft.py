@@ -82,6 +82,8 @@ class SampleReader:
 
     async def open_stream(self):
         self._ensure_async()
+        if self.num_samples % 512 != 0:
+            raise ValueError('num_samples (chunk size) must be a multiple of 512')
         if self.sdr is None:
             raise RuntimeError('SampleReader not open')
         assert self._read_future is None
