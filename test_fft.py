@@ -40,6 +40,10 @@ class SampleReader:
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
+    def __init__(self, sample_rate: float = 2.4e6, num_samples: int = 16384):
+        self.sample_rate = sample_rate
+        self.num_samples = num_samples
+
     @property
     def gain_values_db(self) -> list[float]:
         """List of possible values for :attr:`gain` in dB
@@ -220,7 +224,7 @@ class SampleProcessor:
     sample_rate: float
     stateful_index: int
 
-    def __init__(self, sample_rate: float) -> None:
+    def __init__(self, sample_rate: float = SampleReader.sample_rate) -> None:
         self.sample_rate = sample_rate
         self.stateful_index = 0
 
@@ -341,6 +345,13 @@ def main():
     p.add_argument('--from-file', dest='infile')
     p.add_argument('--read-only', dest='read_only', action='store_true')
     p.add_argument('-o', '--outfile', dest='outfile')
+    p.add_argument(
+        '-c', '--chunk-size',
+        dest='chunk_size',
+        type=int,
+        default=SampleReader.num_samples,
+        help='Chunk size for sdr.read_samples',
+    )
     p.add_argument('--max-samples', dest='max_samples', type=int)
     args = p.parse_args()
     if args.infile is not None:
@@ -348,13 +359,13 @@ def main():
     elif args.read_only:
         assert args.outfile is not None
         assert args.max_samples is not None
-        run_readonly(args.outfile, args.max_samples)
+        run_readonly(args.outfile, args.chunk_size, args.max_samples)
     else:
         run_main()
 
-def run_readonly(outfile: str, max_samples: int):
+def run_readonly(outfile: str, chunk_size: int, max_samples: int):
     samples = np.zeros(0, dtype=np.complex128)
-    reader = SampleReader()
+    reader = SampleReader(num_samples=chunk_size)
     processor = SampleProcessor(reader.sample_rate)
     with reader:
         while samples.size < max_samples:
