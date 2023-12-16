@@ -369,18 +369,18 @@ class SampleProcessor:
         return samples
 
     def process(self, samples: SamplesT):
-        fft_size = self.fft_size
-        f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
-        num_ffts = len(samples) // fft_size # // is an integer division which rounds down
-        fft_thresh = 0.1
-        beep_freqs = []
-        for i in range(num_ffts):
-            fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-            if np.max(fft) > fft_thresh:
-                beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
-            plt.plot(f,fft)
-        #print(beep_freqs)
-        #plt.show()
+        # fft_size = self.fft_size
+        # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
+        # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+        # fft_thresh = 0.1
+        # beep_freqs = []
+        # for i in range(num_ffts):
+        #     fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+        #     if np.max(fft) > fft_thresh:
+        #         beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
+        #     plt.plot(f,fft)
+        # #print(beep_freqs)
+        # #plt.show()
 
         t = np.arange(len(samples))/self.sample_rate
         samples = samples * np.exp(2j*np.pi*t*self.freq_offset)
