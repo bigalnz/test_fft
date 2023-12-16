@@ -536,7 +536,10 @@ def run_readonly(outfile: str, chunk_size: int, max_samples: int):
     np.save(outfile, samples)
 
 async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
-    samples = np.zeros(max_samples, dtype=np.complex128)
+    nrows = max_samples // chunk_size
+    if nrows * chunk_size < max_samples:
+        nrows += 1
+    samples = np.zeros((nrows, chunk_size), dtype=np.complex128)
     reader = SampleReader(num_samples=chunk_size)
     processor = SampleProcessor(reader.sample_rate)
 
@@ -544,26 +547,17 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
         await reader.open_stream()
         i = 0
         count = 0
-        start_ix = 0
         async for _samples in reader:
-            assert start_ix < max_samples
-            size = _samples.size
-            end_ix = start_ix + size
-
-            if end_ix > max_samples:
-                size = max_samples - start_ix
-                samples[start_ix:] = _samples[:size]
-            else:
-                samples[start_ix:end_ix] = _samples
-            count += size
-            # if count % 100 == 0:
-            #     print(f'{i}\t{reader.aio_queue.qsize()=}\t{size=}\t{start_ix=}\t{end_ix=}\t{count=}')
-            start_ix = end_ix
+            if count == 0:
+                print(f'{_samples.size=}')
+            samples[i,:] = _samples
+            count += _samples.size
+            # print(f'{i}\t{reader.aio_queue.qsize()=}\t{count=}')
             i += 1
             if count >= max_samples:
                 break
-
         await reader.close_stream()
+    samples = samples.flatten()[:max_samples]
     processor.process(samples)
     np.save(outfile, samples)
 
