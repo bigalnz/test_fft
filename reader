@@ -1,0 +1,61 @@
+from typing import Self, TYPE_CHECKING
+import threading
+import numpy as np
+import numpy.typing as npt
+import matplotlib.pyplot as plt
+from rtlsdr import *
+from pylab import *
+import time
+from scipy import signal 
+
+if TYPE_CHECKING:
+    # NOTE: This is just for static type checking because rtlsdr.RtlSdr isn't
+    #       really set up properly.. I should probably fix that
+    from rtlsdr.rtlsdr import RtlSdr
+
+class SampleReader:
+
+    sample_rate: float = 2.4e6
+    center_freq: float = 160270968
+    gain: float|str = 44.5
+    sdr: RtlSdr|None = None
+    
+    def open(self):
+        sdr = self.sdr = RtlSdr()
+        sdr.sample_rate = self.sample_rate
+        sdr.center_freq = self.center_freq
+        sdr.gain = self.gain
+
+class SampleProcessor:
+    threshold: float = 0.8
+    freq_offset: float = -43.8e4 #Hz
+    beep_duration: float = 0.017 # seconds
+    num_samples_to_process: int = int(2.4e5)
+
+    sample_rate: float
+    stateful_index: int
+    stateful_rising_edge: int
+
+    def __init__(self, sample_rate: float) -> None:
+        self.sample_rate = sample_rate
+        self.stateful_index = 0
+        self.stateful_rising_edge = 0
+
+def main():
+    print("hello")
+    reader = SampleReader()
+    processor = SampleProcessor(reader.sample_rate)
+    
+    try:
+          while True:
+            # processor.process_from_buffer(buffer)
+            reader.open()
+            print(reader.sample_rate)
+    except KeyboardInterrupt:
+        print('Closing...')
+        reader_thread.stop()
+        print('Closed')
+        return
+main()
+
+    
