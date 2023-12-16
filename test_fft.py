@@ -54,8 +54,8 @@ def process_samples(samples, sample_rate, freq_offset, threshold):
     max_samp = np.max(samples)
     # samples /= np.max(samples)
     # print(f"max sample : {max_samp}")
-    # plt.plot(samples)
-    # plt.show()
+    plt.plot(samples)
+    plt.show()
     
     # Get a boolean array for all samples higher or lower than the threshold
     low_samples = samples < threshold
@@ -126,13 +126,17 @@ try:
         #with open('samples.npy', 'wb') as f:
         #    np.save(f, samples)
         #print(f"finish : {time.time()-start}")
-        with open('samples.npy', 'r'):
-            samples_from_file = np.load('samples.npy')
+
+        file = 'log_v1.npy'
+        # file = 'samples.npy'
+        
+        with open(file, 'r'):
+            samples_from_file = np.load(file)
             print(f"size from file : {samples_from_file.size}")
 
-        for i in range(0, samples_from_file.size):
-            i = i * 1024000
+        for i in range(0, samples_from_file.size, 1024000):
             samples = samples_from_file[i:i+1024000]
+            print(samples.size)
 
         # use matplotlib to estimate and plot the PSD
         # psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
