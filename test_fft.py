@@ -42,7 +42,7 @@ class SampleReader:
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
-    aio_qsize: int = 6000
+    aio_qsize: int = 100
 
     def __init__(self, sample_rate: float = 2.4e6, num_samples: int = 16384):
         self.sample_rate = sample_rate
@@ -278,11 +278,11 @@ class SampleBuffer:
     def __init__(self, maxsize: int = 0) -> None:
         self.maxsize = maxsize
         self._samples: SamplesT = np.zeros(0, dtype=np.complex128)
-        self._lock: threading.RLock = threading.RLock()
-        self._notify_w = threading.Condition(self._lock)
-        self._notify_r = threading.Condition(self._lock)
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._notify_w = asyncio.Condition(self._lock)
+        self._notify_r = asyncio.Condition(self._lock)
 
-    def put(self, samples: SamplesT, timeout: float|None = None):
+    async def put(self, samples: SamplesT, timeout: float|None = None):
         """Append new samples to the end of the buffer, blocking if necessary
 
         If *timeout* is given, waits for at most *timeout* seconds for enough
@@ -292,31 +292,19 @@ class SampleBuffer:
         Raises:
             QueueFull: If a timeout occurs waiting for available write space
         """
-        with self._lock:
+
+        async with self._lock:
             new_size = len(self) + samples.size
             if self.maxsize > 0 and new_size > self.maxsize:
                 def can_write():
                     return new_size <= self.maxsize
-                r = self._notify_w.wait_for(can_write, timeout=timeout)
+                r = await self._notify_w.wait_for(can_write)
                 if not r:
-                    raise QueueFull()
+                    raise asyncio.QueueFull()
             self._samples = np.concatenate((self._samples, samples))
             self._notify_r.notify_all()
 
-    def put_nowait(self, samples: SamplesT):
-        """Immediately append new samples to the end of the buffer
-
-        Raises:
-            QueueFull: If not enough write space is available
-        """
-        with self._lock:
-            new_size = len(self) + samples.size
-            if self.maxsize > 0 and new_size > self.maxsize:
-                raise QueueFull()
-            self._samples = np.concatenate((self._samples, samples))
-            self._notify_r.notify_all()
-
-    def get(self, count: int, timeout: float|None = None) -> SamplesT:
+    async def get(self, count: int, timeout: float|None = None) -> SamplesT:
         """Get *count* number of samples and remove them from the buffer
 
         If *timeout* is given, waits at most *timeout* seconds for enough
@@ -328,25 +316,11 @@ class SampleBuffer:
         def has_enough_samples():
             return len(self) >= count
 
-        with self._lock:
+        async with self._lock:
             if not has_enough_samples():
-                r = self._notify_r.wait_for(has_enough_samples, timeout=timeout)
+                r = await self._notify_r.wait_for(has_enough_samples)
                 if not r:
-                    raise QueueEmpty()
-            samples = self._samples[:count]
-            self._samples = self._samples[count:]
-            self._notify_w.notify_all()
-            return samples
-
-    def get_nowait(self, count: int) -> SamplesT:
-        """Get *count* number of samples and remove them from the buffer
-
-        Raises:
-            QueueEmpty: If there aren't enough samples
-        """
-        with self._lock:
-            if len(self) < count:
-                raise QueueEmpty()
+                    raise asyncio.QueueEmpty()
             samples = self._samples[:count]
             self._samples = self._samples[count:]
             self._notify_w.notify_all()
@@ -387,10 +361,10 @@ class SampleProcessor:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
 
-    def process_from_buffer(self, buffer: SampleBuffer) -> SamplesT:
+    async def process_from_buffer(self, buffer: SampleBuffer) -> SamplesT:
         """Wait for enough samples on the buffer, then process them
         """
-        samples = buffer.get(self.num_samples_to_process)
+        samples = await buffer.get(self.num_samples_to_process)
         self.process(samples)
         return samples
 
@@ -459,39 +433,6 @@ class SampleProcessor:
         print(f"stateful index : {self.stateful_index}")
 
 
-class ReaderThread(threading.Thread):
-    """Continuously read samples on a separate thread and place them on the buffer
-    """
-    reader: SampleReader
-    buffer: SampleBuffer
-    write_timeout: float = 1
-    def __init__(self, reader: SampleReader, buffer: SampleBuffer) -> None:
-        super().__init__()
-        self.reader = reader
-        self.buffer = buffer
-        self.running: bool = False
-        self._stopped = threading.Event()
-
-    def run(self):
-        self.running = True
-        try:
-            with self.reader:
-                while self.running:
-                    samples = self.reader.read_samples()
-                    try:
-                        self.buffer.put(samples, timeout=1)
-                    except QueueFull:
-                        print('Sample buffer overflow')
-        finally:
-            self._stopped.set()
-
-    def stop(self):
-        if not self.running:
-            return
-        self.running = False
-        self._stopped.wait()
-
-
 
 # NOTE: Always better to run things within a main function
 def main():
@@ -522,7 +463,9 @@ def main():
             run_readonly_async(args.outfile, args.chunk_size, args.max_samples)
         )
     else:
-        run_main()
+        asyncio.run(
+            run_main(args.chunk_size)
+        )
 
 def run_readonly(outfile: str, chunk_size: int, max_samples: int):
     samples = np.zeros(0, dtype=np.complex128)
@@ -567,21 +510,34 @@ def run_from_disk(filename):
     processor = SampleProcessor(SampleReader.sample_rate)
     processor.process(samples)
 
-def run_main():
-    reader = SampleReader()
+async def run_main(chunk_size: int):
+    reader = SampleReader(num_samples=chunk_size)
     processor = SampleProcessor(reader.sample_rate)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
 
-    reader_thread = ReaderThread(reader, buffer)
-    reader_thread.start()
-    try:
+    async def process_loop():
         while True:
-            _samples = processor.process_from_buffer(buffer)
-    except KeyboardInterrupt:
-        print('Closing...')
-        reader_thread.stop()
-        print('Closed')
-        return
+            await processor.process_from_buffer(buffer)
+
+    process_task = asyncio.create_task(process_loop())
+    try:
+        async with reader:
+            i = 0
+            count = 0
+            await reader.open_stream()
+            async for samples in reader:
+                await buffer.put(samples)
+                count += samples.size
+
+                if i % 100 == 0:
+                    print(f'{i=}\t{reader.aio_queue.qsize()=}\t{buffer.qsize()=}\t{count=}')
+                i += 1
+    finally:
+        process_task.cancel()
+        try:
+            await process_task
+        except asyncio.CancelledError:
+            pass
 
 
 # NOTE: This only calls main() above ONLY when the script is being executed
