@@ -499,7 +499,6 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
             i += 1
             if count >= max_samples:
                 break
-        await reader.close_stream()
     samples = samples.flatten()[:max_samples]
     processor.process(samples)
     np.save(outfile, samples)
