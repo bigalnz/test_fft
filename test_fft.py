@@ -369,7 +369,7 @@ class SampleProcessor:
         """Wait for enough samples on the buffer, then process them
         """
         samples = await buffer.get(self.num_samples_to_process)
-        self.process(samples)
+        await asyncio.to_thread(self.process, samples)
         return samples
 
     def process(self, samples: SamplesT):
