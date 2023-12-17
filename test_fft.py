@@ -16,6 +16,7 @@ from scipy import signal
 SamplesT = npt.NDArray[np.complex128]
 """Alias for sample arrays"""
 
+FloatArray = npt.NDArray[np.float64]
 
 
 class SampleReader:
@@ -418,6 +419,23 @@ class SampleProcessor:
     def __init__(self, sample_rate: float = SampleReader.sample_rate) -> None:
         self.sample_rate = sample_rate
         self.stateful_index = 0
+        self._time_array = None
+        self._fir = None
+
+    @property
+    def time_array(self) -> FloatArray:
+        t = self._time_array
+        if t is None:
+            t = np.arange(self.num_samples_to_process)/self.sample_rate
+            self._time_array = t
+        return t
+
+    @property
+    def fir(self) -> FloatArray:
+        h = self._fir
+        if h is None:
+            h = self._fir = signal.firwin(501, 0.02, pass_zero=True)
+        return h
 
     @property
     def fft_size(self) -> int:
@@ -445,9 +463,9 @@ class SampleProcessor:
         # #print(beep_freqs)
         # #plt.show()
 
-        t = np.arange(len(samples))/self.sample_rate
+        t = self.time_array
         samples = samples * np.exp(2j*np.pi*t*self.freq_offset)
-        h = signal.firwin(501, 0.02, pass_zero=True)
+        h = self.fir
         samples = np.convolve(samples, h, 'valid')
         samples = samples[::100]
         sample_rate = self.sample_rate/100
