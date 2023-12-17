@@ -33,9 +33,15 @@ class SampleReader:
 
     aio_qsize: int = 1000
 
-    def __init__(self, sample_rate: float = 2.4e6, num_samples: int = 16384):
+    def __init__(
+        self,
+        sample_rate: float = 2.4e6,
+        num_samples: int = 16384,
+        buffer: SampleBuffer|None = None
+    ):
         self.sample_rate = sample_rate
         self.num_samples = num_samples
+        self._buffer = buffer
         self._running_sync = False
         self._running_async = False
         self.aio_queue: asyncio.Queue[SamplesT|None] = asyncio.Queue(maxsize=self.aio_qsize)
@@ -55,6 +61,17 @@ class SampleReader:
         if self.sdr is None:
             raise RuntimeError('SampleReader not open')
         return [v / 10 for v in self.sdr.gain_values]
+
+    @property
+    def buffer(self) -> SampleBuffer|None:
+        return self._buffer
+    @buffer.setter
+    def buffer(self, value: SampleBuffer|None):
+        if value is self._buffer:
+            return
+        if self._aio_streaming:
+            raise RuntimeError('cannot change buffer while streaming')
+        self._buffer = value
 
     def read_samples(self) -> SamplesT:
         """Read :attr:`num_samples` from the device
@@ -123,10 +140,15 @@ class SampleReader:
             return
 
         async def add_to_queue(samples: SamplesT):
+            q = self.buffer if self.buffer is not None else self.aio_queue
             try:
-                self.aio_queue.put_nowait(samples)
+                if self.buffer is None:
+                    self.aio_queue.put_nowait(samples)
+                else:
+                    await self.buffer.put_nowait(samples)
             except asyncio.QueueFull:
-                print(f'buffer overrun: {self.aio_queue.qsize()=}')
+                print(f'buffer overrun: {q.qsize()=}')
+
         if self._aio_loop is None:
             return
         fut = asyncio.run_coroutine_threadsafe(
@@ -245,6 +267,8 @@ class SampleReader:
     async def __anext__(self) -> SamplesT:
         if not self._aio_streaming:
             raise StopAsyncIteration
+        if self.buffer is not None:
+            raise RuntimeError('cannot use async for if SampleBuffer is set')
         samples = await self.aio_queue.get()
         self.aio_queue.task_done()
         if samples is None:
@@ -252,6 +276,8 @@ class SampleReader:
         return samples
 
     def __aiter__(self):
+        if self.buffer is not None:
+            raise RuntimeError('cannot use async for if SampleBuffer is set')
         return self
 
 
@@ -550,6 +576,7 @@ async def run_main(chunk_size: int):
     reader = SampleReader(num_samples=chunk_size)
     processor = SampleProcessor(reader.sample_rate)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
+    reader.buffer = buffer
 
     async def process_loop():
         while True:
@@ -558,16 +585,11 @@ async def run_main(chunk_size: int):
     process_task = asyncio.create_task(process_loop())
     try:
         async with reader:
-            i = 0
-            count = 0
             await reader.open_stream()
-            async for samples in reader:
-                await buffer.put(samples)
-                count += samples.size
+            while True:
+                await asyncio.sleep(1)
+                print(f'{buffer.qsize()=}')
 
-                if i % 100 == 0:
-                    print(f'{i=}\t{reader.aio_queue.qsize()=}\t{buffer.qsize()=}\t{count=}')
-                i += 1
     finally:
         process_task.cancel()
         try:
