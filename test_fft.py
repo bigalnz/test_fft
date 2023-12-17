@@ -112,7 +112,11 @@ class SampleReader:
         t = self._read_future
         self._read_future = None
         if t is not None:
-            await t
+            try:
+                await t
+            except Exception as exc:
+                print(exc)
+                print('fixme')
         while self.aio_queue.qsize() > 0:
             try:
                 _ = self.aio_queue.get_nowait()
