@@ -421,6 +421,7 @@ class SampleProcessor:
         self.stateful_index = 0
         self._time_array = None
         self._fir = None
+        self._phasor = None
 
     @property
     def time_array(self) -> FloatArray:
@@ -436,6 +437,15 @@ class SampleProcessor:
         if h is None:
             h = self._fir = signal.firwin(501, 0.02, pass_zero=True)
         return h
+
+    @property
+    def phasor(self) -> npt.NDArray[np.complex128]:
+        p = self._phasor
+        if p is None:
+            t = self.time_array
+            p = np.exp(2j*np.pi*t*self.freq_offset)
+            self._phasor = p
+        return p
 
     @property
     def fft_size(self) -> int:
@@ -464,7 +474,7 @@ class SampleProcessor:
         # #plt.show()
 
         t = self.time_array
-        samples = samples * np.exp(2j*np.pi*t*self.freq_offset)
+        samples = samples * self.phasor
         h = self.fir
         samples = np.convolve(samples, h, 'valid')
         samples = samples[::100]
