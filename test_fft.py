@@ -302,9 +302,14 @@ class SampleBuffer:
             if self.maxsize > 0 and new_size > self.maxsize:
                 def can_write():
                     return new_size <= self.maxsize
-                r = await self._notify_w.wait_for(can_write)
-                if not r:
-                    raise asyncio.QueueFull()
+                if timeout is not None:
+                    try:
+                        async with asyncio.timeout(timeout):
+                            await self._notify_w.wait_for(can_write)
+                    except asyncio.TimeoutError:
+                        raise asyncio.QueueFull()
+                else:
+                    await self._notify_w.wait_for(can_write)
             self._samples = np.concatenate((self._samples, samples))
             self._notify_r.notify_all()
 
@@ -322,9 +327,14 @@ class SampleBuffer:
 
         async with self._lock:
             if not has_enough_samples():
-                r = await self._notify_r.wait_for(has_enough_samples)
-                if not r:
-                    raise asyncio.QueueEmpty()
+                if timeout is not None:
+                    try:
+                        async with asyncio.timeout(timeout):
+                            await self._notify_w.wait_for(has_enough_samples)
+                    except asyncio.TimeoutError:
+                        raise asyncio.QueueEmpty()
+                else:
+                    await self._notify_r.wait_for(has_enough_samples)
             samples = self._samples[:count]
             self._samples = self._samples[count:]
             self._notify_w.notify_all()
