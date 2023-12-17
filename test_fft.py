@@ -42,7 +42,7 @@ class SampleReader:
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
-    aio_qsize: int = 100
+    aio_qsize: int = 1000
 
     def __init__(self, sample_rate: float = 2.4e6, num_samples: int = 16384):
         self.sample_rate = sample_rate
