@@ -1,20 +1,16 @@
-from typing import Self, TYPE_CHECKING
+from __future__ import annotations
+from typing import Self, TypeAlias, TYPE_CHECKING
 import argparse
 import asyncio
 import concurrent.futures
-import threading
 import numpy as np
 import numpy.typing as npt
-import matplotlib.pyplot as plt
-from rtlsdr import *
-from pylab import *
+import rtlsdr
+
+RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
+
 import time
 from scipy import signal
-
-if TYPE_CHECKING:
-    # NOTE: This is just for static type checking because rtlsdr.RtlSdr isn't
-    #       really set up properly.. I should probably fix that
-    from rtlsdr.rtlsdr import RtlSdr
 
 
 SamplesT = npt.NDArray[np.complex128]
