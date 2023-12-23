@@ -324,12 +324,12 @@ class SampleBuffer:
         """
 
         async with self._lock:
-            new_size = len(self) + samples.size
-            if self.maxsize > 0 and new_size > self.maxsize:
+            sample_size = samples.size
+            def can_write():
+                return len(self) < self.maxsize - sample_size
+            if not can_write():
                 if not block:
                     raise asyncio.QueueFull()
-                def can_write():
-                    return new_size <= self.maxsize
                 if timeout is not None:
                     try:
                         async with asyncio.timeout(timeout):
