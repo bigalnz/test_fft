@@ -6,6 +6,7 @@ import concurrent.futures
 import numpy as np
 import numpy.typing as npt
 import rtlsdr
+import matplotlib.pyplot as plt
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
@@ -20,24 +21,24 @@ FloatArray = npt.NDArray[np.float64]
 
 
 class SampleReader:
-    sample_rate: float = 2.4e6
+    sample_rate: float = 1.024e6
     center_freq: float = 160270968
 
-    gain: float|str = 44.5
+    gain: float|str = 7.7
     """gain in dB"""
 
-    num_samples: int = 16384
+    num_samples: int = 65536
     """Number of samples to read in each iteration"""
 
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
-    aio_qsize: int = 1000
+    aio_qsize: int = 100
 
     def __init__(
         self,
-        sample_rate: float = 2.4e6,
-        num_samples: int = 16384,
+        sample_rate: float = 1.024e6,
+        num_samples: int = 65536,
         buffer: SampleBuffer|None = None
     ):
         self.sample_rate = sample_rate
@@ -407,10 +408,10 @@ class SampleBuffer:
 
 class SampleProcessor:
     threshold: float = 0.9
-    freq_offset: float = -43.8e4 #Hz
+    freq_offset: float = -43.6792e4 #Hz
     beep_duration: float = 0.017 # seconds
 
-    num_samples_to_process: int = int(1.024e6)
+    num_samples_to_process: int = int(2.56e5)
     """Number of samples needed to process"""
 
     sample_rate: float
@@ -422,6 +423,7 @@ class SampleProcessor:
         self._time_array = None
         self._fir = None
         self._phasor = None
+        self.stateful_rising_edge = 0
 
     @property
     def time_array(self) -> FloatArray:
@@ -453,6 +455,7 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def process(self, samples: SamplesT):
+
         # fft_size = self.fft_size
         # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
         # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
@@ -468,15 +471,20 @@ class SampleProcessor:
 
         t = self.time_array
         samples = samples * self.phasor
+        # next two lines are band pass filter?
         h = self.fir
         samples = np.convolve(samples, h, 'valid')
+        # decimation 
         samples = samples[::100]
+        # recalculation of sample rate due to decimation
         sample_rate = self.sample_rate/100
         samples = np.abs(samples)
+        # smoothing
         samples = np.convolve(samples, [1]*10, 'valid')/10
-        max_samp = np.max(samples)
+        # max_samp = np.max(samples)
+
+            
         # samples /= np.max(samples)
-        #print(f"max sample : {max_samp}")
         #plt.plot(samples)
         #plt.show()
 
@@ -490,10 +498,8 @@ class SampleProcessor:
         rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
-        # This would need to be handled more gracefully with a stateful
-        # processing (e.g. saving samples at the end if the pulse is in-between two processing blocks)
-        # Remove stray falling edge at the start
         if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+            self.stateful_index += samples.size + 14
             return
         #print(f"passed len test for idx's")
         if rising_edge_idx[0] > falling_edge_idx[0]:
@@ -503,18 +509,33 @@ class SampleProcessor:
         if rising_edge_idx[-1] > falling_edge_idx[-1]:
             rising_edge_idx = rising_edge_idx[:-1]
 
-        rising_edge_diff = np.diff(rising_edge_idx)
-        time_between_rising_edge = sample_rate / rising_edge_diff * 60
+        # rising_edge_diff = np.diff(rising_edge_idx)
+        # time_between_rising_edge = sample_rate / rising_edge_diff * 60
 
-        pulse_widths = falling_edge_idx - rising_edge_idx
-        rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
-        rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
+        # pulse_widths = falling_edge_idx - rising_edge_idx
+        # rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
+        # rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
 
-        for t, r in zip(time_between_rising_edge, rssi):
-            print(f"BPM: {t:.02f}")
-            print(f"rssi: {r:.02f}")
-        self.stateful_index += len(samples)
-        print(f"stateful index : {self.stateful_index}")
+        # for t, r in zip(time_between_rising_edge, rssi):
+        #     print(f"BPM: {t:.02f}")
+        #     print(f"rssi: {r:.02f}")
+        # self.stateful_index += len(samples)
+        # print(f"stateful index : {self.stateful_index}")
+
+        print(f"stateful rising edge : {self.stateful_rising_edge}")
+        print(f" samples size : {samples.size}")
+        print(f"rising edge idx [0] : {rising_edge_idx[0]}")
+        print(f" stateful index : {self.stateful_index}")
+        print("*****************************************")
+
+        samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+        time_between = 1/sample_rate * samples_between
+        pulse_per_minute = 60 / time_between
+        self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
+        print(f" ppm : {pulse_per_minute}")
+
+        # increment sample count    
+        self.stateful_index += samples.size + 14
 
 
 
@@ -584,14 +605,17 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
             if count >= max_samples:
                 break
     samples = samples.flatten()[:max_samples]
-    processor.process(samples)
     np.save(outfile, samples)
 
 
 def run_from_disk(filename):
     samples = np.load(filename)
     processor = SampleProcessor(SampleReader.sample_rate)
-    processor.process(samples)
+    for ix in range(0, samples.size, processor.num_samples_to_process ):
+        start_time = time.time()
+        processor.process(samples[ix:ix+processor.num_samples_to_process])
+        finish_time = time.time()
+        print(f" run time is {finish_time-start_time}")
 
 async def run_main(chunk_size: int):
     reader = SampleReader(num_samples=chunk_size)
@@ -603,7 +627,11 @@ async def run_main(chunk_size: int):
         await reader.open_stream()
         while True:
             samples = await buffer.get(processor.num_samples_to_process)
+            start_time = time.time()
+            print(f" start time is {time.time()}")
             await asyncio.to_thread(processor.process, samples)
+            finish_time = time.time() - start_time
+            print(f" prcoessor took : {finish_time}")
 
 
 # NOTE: This only calls main() above ONLY when the script is being executed
