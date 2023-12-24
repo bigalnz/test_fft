@@ -11,19 +11,12 @@ RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
 import time
 
-from common import SamplesT
+from common import SamplesT, SampleConfig, ProcessConfig
 from sample_processor import SampleProcessor
 
 
 class SampleReader:
-    sample_rate: float = 1.024e6
-    center_freq: float = 160270968
-
-    gain: float|str = 7.7
-    """gain in dB"""
-
-    num_samples: int = 65536
-    """Number of samples to read in each iteration"""
+    sample_config: SampleConfig
 
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
@@ -32,12 +25,10 @@ class SampleReader:
 
     def __init__(
         self,
-        sample_rate: float = 1.024e6,
-        num_samples: int = 65536,
+        sample_config: SampleConfig,
         buffer: SampleBuffer|None = None
     ):
-        self.sample_rate = sample_rate
-        self.num_samples = num_samples
+        self.sample_config = sample_config
         self._buffer = buffer
         self._running_sync = False
         self._running_async = False
@@ -49,6 +40,19 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task|None = None
+
+    @property
+    def sample_rate(self): return self.sample_config.sample_rate
+
+    @property
+    def center_freq(self): return self.sample_config.center_freq
+
+    @property
+    def num_samples(self): return self.sample_config.read_size
+
+    @property
+    def gain(self): return self.sample_config.gain
+
 
     @property
     def gain_values_db(self) -> list[float]:
@@ -205,11 +209,6 @@ class SampleReader:
         sdr.sample_rate = self.sample_rate
         sdr.center_freq = self.center_freq
         sdr.gain = self.gain
-
-        # Now we should read the *actual* values back from the device
-        self.sample_rate = sdr.sample_rate
-        self.center_freq = sdr.center_freq
-        self.gain = sdr.gain
 
         # NOTE: Just for debug purposes. This might help with your gain issue
         print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
@@ -436,9 +435,11 @@ def main():
         )
 
 def run_readonly(outfile: str, chunk_size: int, max_samples: int):
+    sample_config = SampleConfig(read_size=chunk_size)
+    process_config = ProcessConfig(sample_config=sample_config)
     samples = np.zeros(0, dtype=np.complex128)
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    reader = SampleReader(sample_config)
+    processor = SampleProcessor(process_config)
     with reader:
         while samples.size < max_samples:
             _samples = reader.read_samples()
@@ -451,8 +452,8 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
     if nrows * chunk_size < max_samples:
         nrows += 1
     samples = np.zeros((nrows, chunk_size), dtype=np.complex128)
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    sample_config = SampleConfig(read_size=chunk_size)
+    reader = SampleReader(sample_config)
 
     async with reader:
         await reader.open_stream()
@@ -473,7 +474,9 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
 
 def run_from_disk(filename):
     samples = np.load(filename)
-    processor = SampleProcessor(SampleReader.sample_rate)
+    sample_config = SampleConfig()
+    process_config = ProcessConfig(sample_config=sample_config)
+    processor = SampleProcessor(process_config)
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         start_time = time.time()
         processor.process(samples[ix:ix+processor.num_samples_to_process])
@@ -481,8 +484,10 @@ def run_from_disk(filename):
         print(f" run time is {finish_time-start_time}")
 
 async def run_main(chunk_size: int):
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    sample_config = SampleConfig(read_size=chunk_size)
+    process_config = ProcessConfig(sample_config=sample_config)
+    reader = SampleReader(sample_config)
+    processor = SampleProcessor(process_config)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
     reader.buffer = buffer
 

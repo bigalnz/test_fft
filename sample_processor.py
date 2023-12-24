@@ -6,27 +6,41 @@ import numpy as np
 import numpy.typing as npt
 from scipy import signal
 
-from common import SamplesT, FloatArray
+from common import SamplesT, FloatArray, ProcessConfig
 
 
 class SampleProcessor:
+    config: ProcessConfig
     threshold: float = 0.9
-    freq_offset: float = -43.6792e4 #Hz
     beep_duration: float = 0.017 # seconds
-
-    num_samples_to_process: int = int(2.56e5)
-    """Number of samples needed to process"""
-
-    sample_rate: float
     stateful_index: int
 
-    def __init__(self, sample_rate: float) -> None:
-        self.sample_rate = sample_rate
+    def __init__(self, config: ProcessConfig) -> None:
+        self.config = config
         self.stateful_index = 0
         self._time_array = None
         self._fir = None
         self._phasor = None
         self.stateful_rising_edge = 0
+
+    @property
+    def sample_rate(self): return self.config.sample_config.sample_rate
+
+    @property
+    def num_samples_to_process(self): return self.config.num_samples_to_process
+
+    @property
+    def carrier_freq(self):
+        """Center frequency of the carrier wave to process (in Hz)"""
+        return self.config.carrier_freq
+
+    @property
+    def freq_offset(self) -> float:
+        """The offset (difference) between the sdr's center frequency and
+        the :attr:`carrier_freq`
+        """
+        fc = self.config.sample_config.center_freq
+        return fc - self.carrier_freq
 
     @property
     def time_array(self) -> FloatArray:
