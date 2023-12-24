@@ -4,31 +4,18 @@ import argparse
 import asyncio
 import concurrent.futures
 import numpy as np
-import numpy.typing as npt
 import rtlsdr
-import matplotlib.pyplot as plt
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
 import time
-from scipy import signal
 
-
-SamplesT = npt.NDArray[np.complex128]
-"""Alias for sample arrays"""
-
-FloatArray = npt.NDArray[np.float64]
+from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
+from kiwitracker.sample_processor import SampleProcessor
 
 
 class SampleReader:
-    sample_rate: float = 1.024e6
-    center_freq: float = 160270968
-
-    gain: float|str = 7.7
-    """gain in dB"""
-
-    num_samples: int = 65536
-    """Number of samples to read in each iteration"""
+    sample_config: SampleConfig
 
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
@@ -37,12 +24,10 @@ class SampleReader:
 
     def __init__(
         self,
-        sample_rate: float = 1.024e6,
-        num_samples: int = 65536,
+        sample_config: SampleConfig,
         buffer: SampleBuffer|None = None
     ):
-        self.sample_rate = sample_rate
-        self.num_samples = num_samples
+        self.sample_config = sample_config
         self._buffer = buffer
         self._running_sync = False
         self._running_async = False
@@ -54,6 +39,19 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task|None = None
+
+    @property
+    def sample_rate(self): return self.sample_config.sample_rate
+
+    @property
+    def center_freq(self): return self.sample_config.center_freq
+
+    @property
+    def num_samples(self): return self.sample_config.read_size
+
+    @property
+    def gain(self): return self.sample_config.gain
+
 
     @property
     def gain_values_db(self) -> list[float]:
@@ -210,11 +208,6 @@ class SampleReader:
         sdr.sample_rate = self.sample_rate
         sdr.center_freq = self.center_freq
         sdr.gain = self.gain
-
-        # Now we should read the *actual* values back from the device
-        self.sample_rate = sdr.sample_rate
-        self.center_freq = sdr.center_freq
-        self.gain = sdr.gain
 
         # NOTE: Just for debug purposes. This might help with your gain issue
         print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
@@ -406,138 +399,6 @@ class SampleBuffer:
         return self._samples.size
 
 
-class SampleProcessor:
-    threshold: float = 0.9
-    freq_offset: float = -43.6792e4 #Hz
-    beep_duration: float = 0.017 # seconds
-
-    num_samples_to_process: int = int(2.56e5)
-    """Number of samples needed to process"""
-
-    sample_rate: float
-    stateful_index: int
-
-    def __init__(self, sample_rate: float = SampleReader.sample_rate) -> None:
-        self.sample_rate = sample_rate
-        self.stateful_index = 0
-        self._time_array = None
-        self._fir = None
-        self._phasor = None
-        self.stateful_rising_edge = 0
-
-    @property
-    def time_array(self) -> FloatArray:
-        t = self._time_array
-        if t is None:
-            t = np.arange(self.num_samples_to_process)/self.sample_rate
-            self._time_array = t
-        return t
-
-    @property
-    def fir(self) -> FloatArray:
-        h = self._fir
-        if h is None:
-            h = self._fir = signal.firwin(501, 0.02, pass_zero=True)
-        return h
-
-    @property
-    def phasor(self) -> npt.NDArray[np.complex128]:
-        p = self._phasor
-        if p is None:
-            t = self.time_array
-            p = np.exp(2j*np.pi*t*self.freq_offset)
-            self._phasor = p
-        return p
-
-    @property
-    def fft_size(self) -> int:
-        # this makes sure there's at least 1 full chunk within each beep
-        return int(self.beep_duration * self.sample_rate / 2)
-
-    def process(self, samples: SamplesT):
-
-        # fft_size = self.fft_size
-        # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
-        # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
-        # fft_thresh = 0.1
-        # beep_freqs = []
-        # for i in range(num_ffts):
-        #     fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-        #     if np.max(fft) > fft_thresh:
-        #         beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
-        #     plt.plot(f,fft)
-        # #print(beep_freqs)
-        # #plt.show()
-
-        t = self.time_array
-        samples = samples * self.phasor
-        # next two lines are band pass filter?
-        h = self.fir
-        samples = np.convolve(samples, h, 'valid')
-        # decimation 
-        samples = samples[::100]
-        # recalculation of sample rate due to decimation
-        sample_rate = self.sample_rate/100
-        samples = np.abs(samples)
-        # smoothing
-        samples = np.convolve(samples, [1]*10, 'valid')/10
-        # max_samp = np.max(samples)
-
-            
-        # samples /= np.max(samples)
-        #plt.plot(samples)
-        #plt.show()
-
-        # Get a boolean array for all samples higher or lower than the threshold
-        low_samples = samples < self.threshold
-        high_samples = samples >= self.threshold
-
-        # Compute the rising edge and falling edges by comparing the current value to the next with
-        # the boolean operator & (if both are true the result is true) and converting this to an index
-        # into the current array
-        rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-        falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
-
-        if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
-            self.stateful_index += samples.size + 14
-            return
-        #print(f"passed len test for idx's")
-        if rising_edge_idx[0] > falling_edge_idx[0]:
-            falling_edge_idx = falling_edge_idx[1:]
-
-        # Remove stray rising edge at the end
-        if rising_edge_idx[-1] > falling_edge_idx[-1]:
-            rising_edge_idx = rising_edge_idx[:-1]
-
-        # rising_edge_diff = np.diff(rising_edge_idx)
-        # time_between_rising_edge = sample_rate / rising_edge_diff * 60
-
-        # pulse_widths = falling_edge_idx - rising_edge_idx
-        # rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
-        # rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
-
-        # for t, r in zip(time_between_rising_edge, rssi):
-        #     print(f"BPM: {t:.02f}")
-        #     print(f"rssi: {r:.02f}")
-        # self.stateful_index += len(samples)
-        # print(f"stateful index : {self.stateful_index}")
-
-        print(f"stateful rising edge : {self.stateful_rising_edge}")
-        print(f" samples size : {samples.size}")
-        print(f"rising edge idx [0] : {rising_edge_idx[0]}")
-        print(f" stateful index : {self.stateful_index}")
-        print("*****************************************")
-
-        samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
-        time_between = 1/sample_rate * samples_between
-        pulse_per_minute = 60 / time_between
-        self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
-        print(f" ppm : {pulse_per_minute}")
-
-        # increment sample count    
-        self.stateful_index += samples.size + 14
-
-
 
 # NOTE: Always better to run things within a main function
 def main():
@@ -550,7 +411,7 @@ def main():
         '-c', '--chunk-size',
         dest='chunk_size',
         type=int,
-        default=SampleReader.num_samples,
+        default=SampleConfig().read_size,
         help='Chunk size for sdr.read_samples',
     )
     p.add_argument('--max-samples', dest='max_samples', type=int)
@@ -573,9 +434,11 @@ def main():
         )
 
 def run_readonly(outfile: str, chunk_size: int, max_samples: int):
+    sample_config = SampleConfig(read_size=chunk_size)
+    process_config = ProcessConfig(sample_config=sample_config)
     samples = np.zeros(0, dtype=np.complex128)
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    reader = SampleReader(sample_config)
+    processor = SampleProcessor(process_config)
     with reader:
         while samples.size < max_samples:
             _samples = reader.read_samples()
@@ -588,8 +451,8 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
     if nrows * chunk_size < max_samples:
         nrows += 1
     samples = np.zeros((nrows, chunk_size), dtype=np.complex128)
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    sample_config = SampleConfig(read_size=chunk_size)
+    reader = SampleReader(sample_config)
 
     async with reader:
         await reader.open_stream()
@@ -610,7 +473,9 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
 
 def run_from_disk(filename):
     samples = np.load(filename)
-    processor = SampleProcessor(SampleReader.sample_rate)
+    sample_config = SampleConfig()
+    process_config = ProcessConfig(sample_config=sample_config)
+    processor = SampleProcessor(process_config)
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         start_time = time.time()
         processor.process(samples[ix:ix+processor.num_samples_to_process])
@@ -618,8 +483,10 @@ def run_from_disk(filename):
         print(f" run time is {finish_time-start_time}")
 
 async def run_main(chunk_size: int):
-    reader = SampleReader(num_samples=chunk_size)
-    processor = SampleProcessor(reader.sample_rate)
+    sample_config = SampleConfig(read_size=chunk_size)
+    process_config = ProcessConfig(sample_config=sample_config)
+    reader = SampleReader(sample_config)
+    processor = SampleProcessor(process_config)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
     reader.buffer = buffer
 
