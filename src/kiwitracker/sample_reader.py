@@ -11,8 +11,8 @@ RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
 import time
 
-from common import SamplesT, SampleConfig, ProcessConfig
-from sample_processor import SampleProcessor
+from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
+from kiwitracker.sample_processor import SampleProcessor
 
 
 class SampleReader:

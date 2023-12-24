@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import signal
 
-from common import SamplesT, FloatArray, ProcessConfig
+from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 
 
 class SampleProcessor:
