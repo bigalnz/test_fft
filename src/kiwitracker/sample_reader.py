@@ -5,7 +5,6 @@ import asyncio
 import concurrent.futures
 import numpy as np
 import rtlsdr
-import matplotlib.pyplot as plt
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
