@@ -412,7 +412,7 @@ def main():
         '-c', '--chunk-size',
         dest='chunk_size',
         type=int,
-        default=SampleReader.num_samples,
+        default=SampleConfig().read_size,
         help='Chunk size for sdr.read_samples',
     )
     p.add_argument('--max-samples', dest='max_samples', type=int)
