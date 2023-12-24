@@ -400,13 +400,24 @@ class SampleBuffer:
 
 
 
-# NOTE: Always better to run things within a main function
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--from-file', dest='infile')
-    p.add_argument('--read-only', dest='read_only', action='store_true')
-    p.add_argument('-a', '--async-mode', dest='async_mode', action='store_true')
-    p.add_argument('-o', '--outfile', dest='outfile')
+    p.add_argument(
+        '-f', '--from-file',
+        dest='infile',
+        help='Read samples from the given filename and process them',
+    )
+    p.add_argument(
+        '-o', '--outfile',
+        dest='outfile',
+        help='Read samples from the device and save to the given filename',
+    )
+    p.add_argument(
+        '-m', '--max-samples',
+        dest='max_samples',
+        type=int,
+        help='Number of samples to read when "-o/--outfile" is specified',
+    )
     p.add_argument(
         '-c', '--chunk-size',
         dest='chunk_size',
@@ -414,39 +425,21 @@ def main():
         default=SampleConfig().read_size,
         help='Chunk size for sdr.read_samples',
     )
-    p.add_argument('--max-samples', dest='max_samples', type=int)
     args = p.parse_args()
     if args.infile is not None:
         run_from_disk(args.infile)
-    elif args.read_only:
-        assert args.outfile is not None
-        assert args.max_samples is not None
-        run_readonly(args.outfile, args.chunk_size, args.max_samples)
-    elif args.async_mode:
-        assert args.outfile is not None
+    elif args.outfile is not None:
         assert args.max_samples is not None
         asyncio.run(
-            run_readonly_async(args.outfile, args.chunk_size, args.max_samples)
+            run_readonly(args.outfile, args.chunk_size, args.max_samples)
         )
     else:
         asyncio.run(
             run_main(args.chunk_size)
         )
 
-def run_readonly(outfile: str, chunk_size: int, max_samples: int):
-    sample_config = SampleConfig(read_size=chunk_size)
-    process_config = ProcessConfig(sample_config=sample_config)
-    samples = np.zeros(0, dtype=np.complex128)
-    reader = SampleReader(sample_config)
-    processor = SampleProcessor(process_config)
-    with reader:
-        while samples.size < max_samples:
-            _samples = reader.read_samples()
-            samples = np.concatenate((samples, _samples))
-        processor.process(samples)
-    np.save(outfile, samples)
 
-async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
+async def run_readonly(outfile: str, chunk_size: int, max_samples: int):
     nrows = max_samples // chunk_size
     if nrows * chunk_size < max_samples:
         nrows += 1
@@ -482,6 +475,7 @@ def run_from_disk(filename):
         finish_time = time.time()
         print(f" run time is {finish_time-start_time}")
 
+
 async def run_main(chunk_size: int):
     sample_config = SampleConfig(read_size=chunk_size)
     process_config = ProcessConfig(sample_config=sample_config)
@@ -501,7 +495,5 @@ async def run_main(chunk_size: int):
             print(f" prcoessor took : {finish_time}")
 
 
-# NOTE: This only calls main() above ONLY when the script is being executed
-#       This way you can import it without running the while loop
 if __name__ == '__main__':
     main()
