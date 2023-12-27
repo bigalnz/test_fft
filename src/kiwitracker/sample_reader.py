@@ -400,54 +400,89 @@ class SampleBuffer:
 
 
 
-# NOTE: Always better to run things within a main function
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--from-file', dest='infile')
-    p.add_argument('--read-only', dest='read_only', action='store_true')
-    p.add_argument('-a', '--async-mode', dest='async_mode', action='store_true')
-    p.add_argument('-o', '--outfile', dest='outfile')
     p.add_argument(
+        '-f', '--from-file',
+        dest='infile',
+        help='Read samples from the given filename and process them',
+    )
+    p.add_argument(
+        '-o', '--outfile',
+        dest='outfile',
+        help='Read samples from the device and save to the given filename',
+    )
+    p.add_argument(
+        '-m', '--max-samples',
+        dest='max_samples',
+        type=int,
+        help='Number of samples to read when "-o/--outfile" is specified',
+    )
+
+    s_group = p.add_argument_group('Sampling')
+    s_group.add_argument(
         '-c', '--chunk-size',
         dest='chunk_size',
         type=int,
-        default=SampleConfig().read_size,
-        help='Chunk size for sdr.read_samples',
+        default=SampleConfig.read_size,
+        help='Chunk size for sdr.read_samples (default: %(default)s)',
     )
-    p.add_argument('--max-samples', dest='max_samples', type=int)
+    s_group.add_argument(
+        '-s', '--sample-rate', dest='sample_rate', type=float,
+        default=SampleConfig.sample_rate,
+        help='SDR sample rate (default: %(default)s)',
+    )
+    s_group.add_argument(
+        '--center-freq', dest='center_freq', type=float,
+        default=SampleConfig.center_freq,
+        help='SDR center frequency (default: %(default)s)',
+    )
+    s_group.add_argument(
+        '-g', '--gain', dest='gain', type=float,
+        default=SampleConfig.gain,
+        help='SDR gain (default: %(default)s)',
+    )
+
+    p_group = p.add_argument_group('Processing')
+    p_group.add_argument(
+        '--carrier', dest='carrier', type=float,
+        default=ProcessConfig.carrier_freq,
+        help='Carrier frequency to process (default: %(default)s)',
+    )
+
     args = p.parse_args()
+
+    sample_config = SampleConfig(
+        sample_rate=args.sample_rate, center_freq=args.center_freq,
+        gain=args.gain, read_size=args.chunk_size,
+    )
+    process_config = ProcessConfig(
+        sample_config=sample_config, carrier_freq=args.carrier,
+    )
+
     if args.infile is not None:
-        run_from_disk(args.infile)
-    elif args.read_only:
-        assert args.outfile is not None
-        assert args.max_samples is not None
-        run_readonly(args.outfile, args.chunk_size, args.max_samples)
-    elif args.async_mode:
-        assert args.outfile is not None
+        run_from_disk(
+            process_config=process_config,
+            filename=args.infile,
+        )
+    elif args.outfile is not None:
         assert args.max_samples is not None
         asyncio.run(
-            run_readonly_async(args.outfile, args.chunk_size, args.max_samples)
+            run_readonly(
+                sample_config=sample_config,
+                filename=args.outfile,
+                max_samples=args.max_samples,
+            )
         )
     else:
         asyncio.run(
-            run_main(args.chunk_size)
+            run_main(sample_config=sample_config, process_config=process_config)
         )
 
-def run_readonly(outfile: str, chunk_size: int, max_samples: int):
-    sample_config = SampleConfig(read_size=chunk_size)
-    process_config = ProcessConfig(sample_config=sample_config)
-    samples = np.zeros(0, dtype=np.complex128)
-    reader = SampleReader(sample_config)
-    processor = SampleProcessor(process_config)
-    with reader:
-        while samples.size < max_samples:
-            _samples = reader.read_samples()
-            samples = np.concatenate((samples, _samples))
-        processor.process(samples)
-    np.save(outfile, samples)
 
-async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
-    nrows = max_samples // chunk_size
+async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
+    chunk_size = sample_config.read_size
+    nrows = max_samples // sample_config.read_size
     if nrows * chunk_size < max_samples:
         nrows += 1
     samples = np.zeros((nrows, chunk_size), dtype=np.complex128)
@@ -468,13 +503,11 @@ async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
             if count >= max_samples:
                 break
     samples = samples.flatten()[:max_samples]
-    np.save(outfile, samples)
+    np.save(filename, samples)
 
 
-def run_from_disk(filename):
+def run_from_disk(process_config: ProcessConfig, filename: str):
     samples = np.load(filename)
-    sample_config = SampleConfig()
-    process_config = ProcessConfig(sample_config=sample_config)
     processor = SampleProcessor(process_config)
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         start_time = time.time()
@@ -482,9 +515,8 @@ def run_from_disk(filename):
         finish_time = time.time()
         print(f" run time is {finish_time-start_time}")
 
-async def run_main(chunk_size: int):
-    sample_config = SampleConfig(read_size=chunk_size)
-    process_config = ProcessConfig(sample_config=sample_config)
+
+async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
     reader = SampleReader(sample_config)
     processor = SampleProcessor(process_config)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
@@ -501,7 +533,5 @@ async def run_main(chunk_size: int):
             print(f" prcoessor took : {finish_time}")
 
 
-# NOTE: This only calls main() above ONLY when the script is being executed
-#       This way you can import it without running the while loop
 if __name__ == '__main__':
     main()
