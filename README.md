@@ -4,11 +4,10 @@ Suggested buffering chunk size -c 16384 or 65536 (to test)
 Suggested sample rate -s 2.048e6 (allows covering from channel 00 (160.120Mhz), 01 (160.130).....99 (161.110Mhz) ) (Total Spectrum 0.990Mhz)
 (Not configurable but FYI processing 2.56e5 samples at a time)
 
-80 BPM - Mortality mode
-
-46-48 BPM - Not incubating
-
-30 BPM - 
+** BPM modes of transmitter **
+* 80 BPM - Mortality mode
+* 46-48 BPM - Not incubating
+* 30 BPM - Incubating
 
 **To Do:**
 * Add samples for testing purposes
