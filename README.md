@@ -5,7 +5,9 @@ Suggested sample rate -s 2.048e6 (allows covering from channel 00 (160.120Mhz), 
 (Not configurable but FYI processing 2.56e5 samples at a time)
 
 80 BPM - Mortality mode
+
 46-48 BPM - Not incubating
+
 30 BPM - 
 
 **To Do:**
