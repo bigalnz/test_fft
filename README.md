@@ -11,6 +11,7 @@ Suggested sample rate -s 2.048e6 (allows covering from channel 00 (160.120Mhz), 
 **To Do:**
 * Add samples for testing purposes
 * Add SNR output for each beep
+* How often to do a channel scan? Hourly?
 * Add option to log signals to MySQL
 
 usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER]
