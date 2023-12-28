@@ -58,6 +58,7 @@ Sampling:
                         SDR sample rate (default: 1024000.0)
   --center-freq CENTER_FREQ
                         SDR center frequency (default: 160270968)
+                        
   -g GAIN, --gain GAIN  SDR gain (default: 7.7)
 
 Processing:
