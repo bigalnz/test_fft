@@ -30,8 +30,13 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
 
 ## To Do:
 
-- [ ] Add samples for testing purposes (weak signals, signals on ch00 and ch99, multiple signals, signals at 30, 48, 80 bpm, CT signals)
-- [ ] Add SNR output for each beep
+- [X] Add samples for testing purposes (weak signals, signals on ch00 and ch99, multiple signals, signals at 30, 48, 80 bpm, CT signals)
+- [ ] Lower threshold to more suitable value - from 0.9 to ?
+- [ ] Add sample signal on Ch00 and Ch99 for Nyquist edge test
+- [ ] Add sample signal for 30BPM (incubation mode)
+- [ ] In sample_processor handle edge case where chunk edge goes through middle of a beep (falling edge array is empty). Add Boolean 'no_falling_edge' and track number of high samples for calculation of `BEEP_DURATION` on next set of chunks.
+- [ ] Add validation of background beep output with tolderance +/- 1? `[expected for expected in [80, 46, 47, 48 30] if abs(actual - expected) < 1]`
+- [X] Add SNR output for each beep
 - [ ] How often to do a channel scan? Hourly?
 - [ ] Add option to log signals to MySQL
 - [ ] Change Fc default to closer to being between middle freqs (i.e. 160.625Mhz) if bandwidth is 1.5Mhz. Else if bandwidth is 2.048Mhz then Fc can be out of band for freqs of interest - performance question on Rpi4 / No need to deal with DC spike at Fc.
