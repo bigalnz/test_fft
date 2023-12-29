@@ -42,7 +42,39 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
 https://geekhelp-my.sharepoint.com/:f:/g/personal/al_geekhelp_co_nz/EhBFHUL_rwtKlAynyeeJMHoB3r3P6JYrl-5MQp0ihP7-_w?e=hoKMeB
 
 
+## Installation
+
+Installation within a [virtual environment](https://docs.python.org/3.11/library/venv.html) is highly recommended
+
+### Pip
+
+```bash
+pip install 'kiwitracker@git+https://github.com/bigalnz/test_fft.git'
+```
+
+### Development Mode
+
+#### Clone the repo
+
+```bash
+git clone git@github.com:bigalnz/test_fft.git
+```
+
+#### Install in "editable mode"
+
+```bash
+pip install -e .
+```
+
 ## Usage
+
+Once installed, the project can be invoked on the command line:
+
+```bash
+kiwitracker --help
+```
+
+Which should display the following:
 
 ```bash
 usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER]
