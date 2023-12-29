@@ -31,10 +31,11 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
 ## To Do:
 
 - [X] Add samples for testing purposes (weak signals, signals on ch00 and ch99, multiple signals, signals at 30, 48, 80 bpm, CT signals)
+- [ ] - [ ] In sample_processor handle edge case where chunk edge goes through middle of a beep (falling edge array is empty). Add Boolean 'no_falling_edge' and track number of high samples for calculation of `BEEP_DURATION` on next set of chunks.
 - [ ] Lower threshold to more suitable value - from 0.9 to ?
+- [ ] Test performance on Rpi4
 - [ ] Add sample signal on Ch00 and Ch99 for Nyquist edge test
 - [ ] Add sample signal for 30BPM (incubation mode)
-- [ ] In sample_processor handle edge case where chunk edge goes through middle of a beep (falling edge array is empty). Add Boolean 'no_falling_edge' and track number of high samples for calculation of `BEEP_DURATION` on next set of chunks.
 - [ ] Add validation (1) background BPM output with tolerance +/- 1? `[expected for expected in [80, 46, 47, 48, 30] if abs(actual - expected) < 1]` and (2) BEEP_DURATION must be 0.017 sec
 - [ ] Processing of CT signals - start with a data class for CT and then CT detection (3 second pause in gap between beeps, i.e. rising_edges)
 - [X] Add SNR output for each beep
