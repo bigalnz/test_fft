@@ -227,6 +227,7 @@ class SampleReader:
         if sdr is None:
             return
         self.sdr = None
+        sdr.set_bias_tee(False)
         sdr.close()
 
     async def aopen(self):
