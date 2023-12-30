@@ -21,6 +21,9 @@ class SampleConfig:
     gain: str|float = 7.7
     """gain in dB"""
 
+    bias_tee_enable: bool = False
+    """Enable bias tee"""
+
 
 @dataclass
 class ProcessConfig:
