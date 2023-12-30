@@ -208,6 +208,8 @@ class SampleReader:
         sdr.sample_rate = self.sample_rate
         sdr.center_freq = self.center_freq
         sdr.gain = self.gain
+        if self.sample_config.bias_tee_enable:
+            sdr.set_bias_tee(True)
 
         # NOTE: Just for debug purposes. This might help with your gain issue
         print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
@@ -442,6 +444,10 @@ def main():
         default=SampleConfig.gain,
         help='SDR gain (default: %(default)s)',
     )
+    s_group.add_argument(
+        '--bias-tee', dest='bias_tee', type=bool, action='store_true',
+        help='Enable bias tee',
+    )
 
     p_group = p.add_argument_group('Processing')
     p_group.add_argument(
@@ -454,7 +460,7 @@ def main():
 
     sample_config = SampleConfig(
         sample_rate=args.sample_rate, center_freq=args.center_freq,
-        gain=args.gain, read_size=args.chunk_size,
+        gain=args.gain, bias_tee_enable=args.bias_tee, read_size=args.chunk_size,
     )
     process_config = ProcessConfig(
         sample_config=sample_config, carrier_freq=args.carrier,
