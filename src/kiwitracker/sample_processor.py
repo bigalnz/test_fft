@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import asyncio
+from matplotlib import pyplot as plt
 
 import numpy as np
 import numpy.typing as npt
@@ -9,9 +10,15 @@ from scipy import signal
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 
 
+def snr(samples, rising_edge_idx, falling_edge_idx):
+    noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
+    signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
+    snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
+    return snr_db
+
 class SampleProcessor:
     config: ProcessConfig
-    threshold: float = 0.9
+    threshold: float = 0.6
     beep_duration: float = 0.017 # seconds
     stateful_index: int
 
@@ -72,7 +79,7 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def process(self, samples: SamplesT):
-
+        #print(f" samples size {samples.size}")
         # fft_size = self.fft_size
         # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
         # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
@@ -95,11 +102,11 @@ class SampleProcessor:
         samples = samples[::100]
         # recalculation of sample rate due to decimation
         sample_rate = self.sample_rate/100
+        samples_for_snr = samples
         samples = np.abs(samples)
         # smoothing
         samples = np.convolve(samples, [1]*10, 'valid')/10
         # max_samp = np.max(samples)
-
 
         # samples /= np.max(samples)
         #plt.plot(samples)
@@ -139,17 +146,19 @@ class SampleProcessor:
         # self.stateful_index += len(samples)
         # print(f"stateful index : {self.stateful_index}")
 
-        print(f"stateful rising edge : {self.stateful_rising_edge}")
-        print(f" samples size : {samples.size}")
-        print(f"rising edge idx [0] : {rising_edge_idx[0]}")
-        print(f" stateful index : {self.stateful_index}")
-        print("*****************************************")
+        #print(f"stateful rising edge : {self.stateful_rising_edge}")
+        #print(f" samples size : {samples.size}")
+        #print(f"rising edge idx [0] : {rising_edge_idx[0]}")
+        #print(f" stateful index : {self.stateful_index}")
+        #print("*****************************************")
 
         samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
         time_between = 1/sample_rate * samples_between
-        pulse_per_minute = 60 / time_between
+        BPM = 60 / time_between
         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
-        print(f" ppm : {pulse_per_minute}")
-
+        SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5)
+        BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
+        
+        print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         # increment sample count
         self.stateful_index += samples.size + 14
