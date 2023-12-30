@@ -445,7 +445,7 @@ def main():
         help='SDR gain (default: %(default)s)',
     )
     s_group.add_argument(
-        '--bias-tee', dest='bias_tee', type=bool, action='store_true',
+        '--bias-tee', dest='bias_tee', action='store_true',
         help='Enable bias tee',
     )
 
