@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from scipy import signal
+import time
 
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 
@@ -79,25 +80,37 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def process(self, samples: SamplesT):
-        #print(f" samples size {samples.size}")
-        # fft_size = self.fft_size
-        # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
-        # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
-        # fft_thresh = 0.1
-        # beep_freqs = []
-        # for i in range(num_ffts):
-        #     fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-        #     if np.max(fft) > fft_thresh:
-        #         beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
-        #     plt.plot(f,fft)
-        # #print(beep_freqs)
+        
+        # look for the presence of a beep within the chunk and :
+        # (1) if beep found calculate the offset
+        # (2) if beep not found iterate the counters and move on
+
+        start_time = time.time()
+        fft_size = self.fft_size
+        f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
+        num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+        fft_thresh = 0.1
+        beep_freqs = []
+        for i in range(num_ffts):
+            fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+            if np.max(fft) > fft_thresh:
+                beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
+        finish_time = time.time()
+
+        # if not beeps increment and exit early
+        if len(beep_freqs) == 0:
+            self.stateful_index += (samples.size/100) + 14
+            return
+        
+        #plt.plot(f,fft)
+        # print(beep_freqs)
         # #plt.show()
 
         t = self.time_array
         samples = samples * self.phasor
         # next two lines are band pass filter?
         h = self.fir
-        samples = np.convolve(samples, h, 'valid')
+        samples = signal.convolve(samples, h, 'valid')
         # decimation
         samples = samples[::100]
         # recalculation of sample rate due to decimation
@@ -105,7 +118,7 @@ class SampleProcessor:
         samples_for_snr = samples
         samples = np.abs(samples)
         # smoothing
-        samples = np.convolve(samples, [1]*10, 'valid')/10
+        samples = signal.convolve(samples, [1]*10, 'valid')/10
         # max_samp = np.max(samples)
 
         # samples /= np.max(samples)
