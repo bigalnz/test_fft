@@ -11,17 +11,23 @@ import time
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 
 
-def snr(samples, rising_edge_idx, falling_edge_idx):
-    noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
-    signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
+def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
+    #print(f"rising edge in snr : {rising_edge_idx}")
+    if (beep_slice):
+        noise_pwr = np.var( samples[falling_edge_idx:] )
+        signal_pwr = np.var ( samples[0:falling_edge_idx])
+    else:
+        noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
+        signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
     snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
     return snr_db
 
 class SampleProcessor:
     config: ProcessConfig
-    threshold: float = 0.6
+    threshold: float = 0.5
     beep_duration: float = 0.017 # seconds
     stateful_index: int
+    beep_slice: False
 
     def __init__(self, config: ProcessConfig) -> None:
         self.config = config
@@ -30,6 +36,7 @@ class SampleProcessor:
         self._fir = None
         self._phasor = None
         self.stateful_rising_edge = 0
+        self.beep_slice = False
 
     @property
     def sample_rate(self): return self.config.sample_config.sample_rate
@@ -85,7 +92,6 @@ class SampleProcessor:
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
 
-        start_time = time.time()
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
         num_ffts = len(samples) // fft_size # // is an integer division which rounds down
@@ -95,17 +101,13 @@ class SampleProcessor:
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             if np.max(fft) > fft_thresh:
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
-        finish_time = time.time()
+                # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
-        # if not beeps increment and exit early
+        # if no beeps increment and exit early
         if len(beep_freqs) == 0:
             self.stateful_index += (samples.size/100) + 14
             return
         
-        #plt.plot(f,fft)
-        # print(beep_freqs)
-        # #plt.show()
-
         t = self.time_array
         samples = samples * self.phasor
         # next two lines are band pass filter?
@@ -117,13 +119,10 @@ class SampleProcessor:
         sample_rate = self.sample_rate/100
         samples_for_snr = samples
         samples = np.abs(samples)
+
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/10
         # max_samp = np.max(samples)
-
-        # samples /= np.max(samples)
-        #plt.plot(samples)
-        #plt.show()
 
         # Get a boolean array for all samples higher or lower than the threshold
         low_samples = samples < self.threshold
@@ -135,8 +134,18 @@ class SampleProcessor:
         rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
+        # Detects if a beep was sliced by end of chunk
+        # To do - add logic to pass to next iteration number of samples between rising edge and chunk end
+        # Then use that to make the calculations for beep duration and SNR
+        if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+            beep_slice = True
+            self.distance_to_sample_end = len(samples+14)-rising_edge_idx[0]
+            print("Slicing of beep encountered")
+            return
+
         if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
             self.stateful_index += samples.size + 14
+            print(samples.size+14)
             return
         #print(f"passed len test for idx's")
         if rising_edge_idx[0] > falling_edge_idx[0]:
@@ -146,32 +155,18 @@ class SampleProcessor:
         if rising_edge_idx[-1] > falling_edge_idx[-1]:
             rising_edge_idx = rising_edge_idx[:-1]
 
-        # rising_edge_diff = np.diff(rising_edge_idx)
-        # time_between_rising_edge = sample_rate / rising_edge_diff * 60
-
-        # pulse_widths = falling_edge_idx - rising_edge_idx
-        # rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
-        # rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
-
-        # for t, r in zip(time_between_rising_edge, rssi):
-        #     print(f"BPM: {t:.02f}")
-        #     print(f"rssi: {r:.02f}")
-        # self.stateful_index += len(samples)
-        # print(f"stateful index : {self.stateful_index}")
-
-        #print(f"stateful rising edge : {self.stateful_rising_edge}")
-        #print(f" samples size : {samples.size}")
-        #print(f"rising edge idx [0] : {rising_edge_idx[0]}")
-        #print(f" stateful index : {self.stateful_index}")
-        #print("*****************************************")
-
         samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
-        time_between = 1/sample_rate * samples_between
+        time_between = 1/sample_rate * (samples_between-70)
         BPM = 60 / time_between
         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
-        SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5)
-        BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
-        
+        print(f"printing prior to snr : {rising_edge_idx}")
+        SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
+        if (self.beep_slice):
+            BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
+            self.beep_slice = False
+        else:
+            BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
         print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         # increment sample count
         self.stateful_index += samples.size + 14
+        print(samples.size+14)

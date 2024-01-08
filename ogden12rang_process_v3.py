@@ -4,30 +4,44 @@ import argparse
 import asyncio
 import concurrent.futures
 import numpy as np
+import numpy.typing as npt
 import rtlsdr
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
 import time
+from scipy import signal
 
-from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
-from kiwitracker.sample_processor import SampleProcessor
+
+SamplesT = npt.NDArray[np.complex128]
+"""Alias for sample arrays"""
+
+FloatArray = npt.NDArray[np.float64]
 
 
 class SampleReader:
-    sample_config: SampleConfig
+    sample_rate: float = 2.4e6
+    center_freq: float = 160270968
+
+    gain: float|str = 36.4
+    """gain in dB"""
+
+    num_samples: int = 16384
+    """Number of samples to read in each iteration"""
 
     sdr: RtlSdr|None = None
     """RtlSdr instance"""
 
-    aio_qsize: int = 100
+    aio_qsize: int = 1000
 
     def __init__(
         self,
-        sample_config: SampleConfig,
+        sample_rate: float = 2.4e6,
+        num_samples: int = 16384,
         buffer: SampleBuffer|None = None
     ):
-        self.sample_config = sample_config
+        self.sample_rate = sample_rate
+        self.num_samples = num_samples
         self._buffer = buffer
         self._running_sync = False
         self._running_async = False
@@ -39,19 +53,6 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task|None = None
-
-    @property
-    def sample_rate(self): return self.sample_config.sample_rate
-
-    @property
-    def center_freq(self): return self.sample_config.center_freq
-
-    @property
-    def num_samples(self): return self.sample_config.read_size
-
-    @property
-    def gain(self): return self.sample_config.gain
-
 
     @property
     def gain_values_db(self) -> list[float]:
@@ -208,8 +209,11 @@ class SampleReader:
         sdr.sample_rate = self.sample_rate
         sdr.center_freq = self.center_freq
         sdr.gain = self.gain
-        if self.sample_config.bias_tee_enable:
-            sdr.set_bias_tee(True)
+
+        # Now we should read the *actual* values back from the device
+        self.sample_rate = sdr.sample_rate
+        self.center_freq = sdr.center_freq
+        self.gain = sdr.gain
 
         # NOTE: Just for debug purposes. This might help with your gain issue
         print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
@@ -227,7 +231,6 @@ class SampleReader:
         if sdr is None:
             return
         self.sdr = None
-        sdr.set_bias_tee(False)
         sdr.close()
 
     async def aopen(self):
@@ -321,12 +324,12 @@ class SampleBuffer:
         """
 
         async with self._lock:
-            sample_size = samples.size
-            def can_write():
-                return len(self) < self.maxsize - sample_size
-            if not can_write():
+            new_size = len(self) + samples.size
+            if self.maxsize > 0 and new_size > self.maxsize:
                 if not block:
                     raise asyncio.QueueFull()
+                def can_write():
+                    return new_size <= self.maxsize
                 if timeout is not None:
                     try:
                         async with asyncio.timeout(timeout):
@@ -402,99 +405,190 @@ class SampleBuffer:
         return self._samples.size
 
 
+class SampleProcessor:
+    threshold: float = 0.9
+    freq_offset: float = -43.8e4 #Hz
+    beep_duration: float = 0.017 # seconds
 
+    num_samples_to_process: int = int(1.024e6)
+    """Number of samples needed to process"""
+
+    sample_rate: float
+    stateful_index: int
+
+    def __init__(self, sample_rate: float = SampleReader.sample_rate) -> None:
+        self.sample_rate = sample_rate
+        self.stateful_index = 0
+        self._time_array = None
+        self._fir = None
+        self._phasor = None
+
+    @property
+    def time_array(self) -> FloatArray:
+        t = self._time_array
+        if t is None:
+            t = np.arange(self.num_samples_to_process)/self.sample_rate
+            self._time_array = t
+        return t
+
+    @property
+    def fir(self) -> FloatArray:
+        h = self._fir
+        if h is None:
+            h = self._fir = signal.firwin(501, 0.02, pass_zero=True)
+        return h
+
+    @property
+    def phasor(self) -> npt.NDArray[np.complex128]:
+        p = self._phasor
+        if p is None:
+            t = self.time_array
+            p = np.exp(2j*np.pi*t*self.freq_offset)
+            self._phasor = p
+        return p
+
+    @property
+    def fft_size(self) -> int:
+        # this makes sure there's at least 1 full chunk within each beep
+        return int(self.beep_duration * self.sample_rate / 2)
+
+    async def process_from_buffer(self, buffer: SampleBuffer) -> SamplesT:
+        """Wait for enough samples on the buffer, then process them
+        """
+        samples = await buffer.get(self.num_samples_to_process)
+        await asyncio.to_thread(self.process, samples)
+        return samples
+
+    def process(self, samples: SamplesT):
+        # fft_size = self.fft_size
+        # f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
+        # num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+        # fft_thresh = 0.1
+        # beep_freqs = []
+        # for i in range(num_ffts):
+        #     fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+        #     if np.max(fft) > fft_thresh:
+        #         beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
+        #     plt.plot(f,fft)
+        # #print(beep_freqs)
+        # #plt.show()
+
+        t = self.time_array
+        samples = samples * self.phasor
+        h = self.fir
+        samples = np.convolve(samples, h, 'valid')
+        samples = samples[::100]
+        sample_rate = self.sample_rate/100
+        samples = np.abs(samples)
+        samples = np.convolve(samples, [1]*10, 'valid')/10
+        max_samp = np.max(samples)
+        # samples /= np.max(samples)
+        #print(f"max sample : {max_samp}")
+        #plt.plot(samples)
+        #plt.show()
+
+        # Get a boolean array for all samples higher or lower than the threshold
+        low_samples = samples < self.threshold
+        high_samples = samples >= self.threshold
+
+        # Compute the rising edge and falling edges by comparing the current value to the next with
+        # the boolean operator & (if both are true the result is true) and converting this to an index
+        # into the current array
+        rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+        falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+
+        if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+            self.stateful_index += samples.size + 14
+            return
+        #print(f"passed len test for idx's")
+        if rising_edge_idx[0] > falling_edge_idx[0]:
+            falling_edge_idx = falling_edge_idx[1:]
+
+        # Remove stray rising edge at the end
+        if rising_edge_idx[-1] > falling_edge_idx[-1]:
+            rising_edge_idx = rising_edge_idx[:-1]
+
+        # rising_edge_diff = np.diff(rising_edge_idx)
+        # time_between_rising_edge = sample_rate / rising_edge_diff * 60
+
+        # pulse_widths = falling_edge_idx - rising_edge_idx
+        # rssi_idxs = list(np.arange(r, r + p) for r, p in zip(rising_edge_idx, pulse_widths))
+        # rssi = [np.mean(samples[r]) * max_samp for r in rssi_idxs]
+
+        # for t, r in zip(time_between_rising_edge, rssi):
+        #     print(f"BPM: {t:.02f}")
+        #     print(f"rssi: {r:.02f}")
+        # self.stateful_index += len(samples)
+        # print(f"stateful index : {self.stateful_index}")
+
+        print(f"stateful rising edge : {self.stateful_rising_edge}")
+        print(f" samples size : {samples.size}")
+        print(f"rising edge idx [0] : {rising_edge_idx[0]}")
+        print(f" stateful index : {self.stateful_index}")
+        print("*****************************************")
+
+        samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+        time_between = 1/sample_rate * samples_between
+        pulse_per_minute = 60 / time_between
+        self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
+        print(f" ppm : {pulse_per_minute}")
+
+        # increment sample count    
+        self.stateful_index += samples.size + 14
+
+
+
+# NOTE: Always better to run things within a main function
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--from-file', dest='infile')
+    p.add_argument('--read-only', dest='read_only', action='store_true')
+    p.add_argument('-a', '--async-mode', dest='async_mode', action='store_true')
+    p.add_argument('-o', '--outfile', dest='outfile')
     p.add_argument(
-        '-f', '--from-file',
-        dest='infile',
-        help='Read samples from the given filename and process them',
-    )
-    p.add_argument(
-        '-o', '--outfile',
-        dest='outfile',
-        help='Read samples from the device and save to the given filename',
-    )
-    p.add_argument(
-        '-m', '--max-samples',
-        dest='max_samples',
-        type=int,
-        help='Number of samples to read when "-o/--outfile" is specified',
-    )
-
-    s_group = p.add_argument_group('Sampling')
-    s_group.add_argument(
         '-c', '--chunk-size',
         dest='chunk_size',
         type=int,
-        default=SampleConfig.read_size,
-        help='Chunk size for sdr.read_samples (default: %(default)s)',
+        default=SampleReader.num_samples,
+        help='Chunk size for sdr.read_samples',
     )
-    s_group.add_argument(
-        '-s', '--sample-rate', dest='sample_rate', type=float,
-        default=SampleConfig.sample_rate,
-        help='SDR sample rate (default: %(default)s)',
-    )
-    s_group.add_argument(
-        '--center-freq', dest='center_freq', type=float,
-        default=SampleConfig.center_freq,
-        help='SDR center frequency (default: %(default)s)',
-    )
-    s_group.add_argument(
-        '-g', '--gain', dest='gain', type=float,
-        default=SampleConfig.gain,
-        help='SDR gain (default: %(default)s)',
-    )
-    s_group.add_argument(
-        '--bias-tee', dest='bias_tee', action='store_true',
-        help='Enable bias tee',
-    )
-
-    p_group = p.add_argument_group('Processing')
-    p_group.add_argument(
-        '--carrier', dest='carrier', type=float,
-        default=ProcessConfig.carrier_freq,
-        help='Carrier frequency to process (default: %(default)s)',
-    )
-
+    p.add_argument('--max-samples', dest='max_samples', type=int)
     args = p.parse_args()
-
-    sample_config = SampleConfig(
-        sample_rate=args.sample_rate, center_freq=args.center_freq,
-        gain=args.gain, bias_tee_enable=args.bias_tee, read_size=args.chunk_size,
-    )
-    process_config = ProcessConfig(
-        sample_config=sample_config, carrier_freq=args.carrier,
-    )
-
     if args.infile is not None:
-        run_from_disk(
-            process_config=process_config,
-            filename=args.infile,
-        )
-    elif args.outfile is not None:
+        run_from_disk(args.infile)
+    elif args.read_only:
+        assert args.outfile is not None
+        assert args.max_samples is not None
+        run_readonly(args.outfile, args.chunk_size, args.max_samples)
+    elif args.async_mode:
+        assert args.outfile is not None
         assert args.max_samples is not None
         asyncio.run(
-            run_readonly(
-                sample_config=sample_config,
-                filename=args.outfile,
-                max_samples=args.max_samples,
-            )
+            run_readonly_async(args.outfile, args.chunk_size, args.max_samples)
         )
     else:
         asyncio.run(
-            run_main(sample_config=sample_config, process_config=process_config)
+            run_main(args.chunk_size)
         )
 
+def run_readonly(outfile: str, chunk_size: int, max_samples: int):
+    samples = np.zeros(0, dtype=np.complex128)
+    reader = SampleReader(num_samples=chunk_size)
+    processor = SampleProcessor(reader.sample_rate)
+    with reader:
+        while samples.size < max_samples:
+            _samples = reader.read_samples()
+            samples = np.concatenate((samples, _samples))
+        processor.process(samples)
+    np.save(outfile, samples)
 
-async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
-    chunk_size = sample_config.read_size
-    nrows = max_samples // sample_config.read_size
+async def run_readonly_async(outfile: str, chunk_size: int, max_samples: int):
+    nrows = max_samples // chunk_size
     if nrows * chunk_size < max_samples:
         nrows += 1
     samples = np.zeros((nrows, chunk_size), dtype=np.complex128)
-    sample_config = SampleConfig(read_size=chunk_size)
-    reader = SampleReader(sample_config)
+    reader = SampleReader(num_samples=chunk_size)
+    processor = SampleProcessor(reader.sample_rate)
 
     async with reader:
         await reader.open_stream()
@@ -510,35 +604,42 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
             if count >= max_samples:
                 break
     samples = samples.flatten()[:max_samples]
-    np.save(filename, samples)
+    processor.process(samples)
+    np.save(outfile, samples)
 
 
-def run_from_disk(process_config: ProcessConfig, filename: str):
+def run_from_disk(filename):
     samples = np.load(filename)
-    processor = SampleProcessor(process_config)
-    start_time = time.time()
-    for ix in range(0, samples.size, processor.num_samples_to_process ):
-        
-        processor.process(samples[ix:ix+processor.num_samples_to_process])
-    finish_time = time.time()
-    print(f" run time is {finish_time-start_time}")
+    processor = SampleProcessor(SampleReader.sample_rate)
+    processor.process(samples)
 
-
-async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
-    reader = SampleReader(sample_config)
-    processor = SampleProcessor(process_config)
+async def run_main(chunk_size: int):
+    reader = SampleReader(num_samples=chunk_size)
+    processor = SampleProcessor(reader.sample_rate)
     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
     reader.buffer = buffer
 
-    async with reader:
-        await reader.open_stream()
+    async def process_loop():
         while True:
-            samples = await buffer.get(processor.num_samples_to_process)
-            start_time = time.time()
-            await asyncio.to_thread(processor.process, samples)
-            finish_time = time.time() - start_time
-            # print(f" prcoessor took : {finish_time}")
+            await processor.process_from_buffer(buffer)
+
+    process_task = asyncio.create_task(process_loop())
+    try:
+        async with reader:
+            await reader.open_stream()
+            while True:
+                await asyncio.sleep(1)
+                print(f'{buffer.qsize()=}')
+
+    finally:
+        process_task.cancel()
+        try:
+            await process_task
+        except asyncio.CancelledError:
+            pass
 
 
+# NOTE: This only calls main() above ONLY when the script is being executed
+#       This way you can import it without running the while loop
 if __name__ == '__main__':
     main()
