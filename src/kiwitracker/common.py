@@ -32,5 +32,5 @@ class ProcessConfig:
     carrier_freq: float = 160_707_760
     """Center frequency of the carrier wave to process (in Hz)"""
 
-    num_samples_to_process: int = int(2.56e5)
+    num_samples_to_process: int = int(2.5e5)
     """Number of samples needed to process"""
