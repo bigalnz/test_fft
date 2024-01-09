@@ -14,6 +14,7 @@ from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     #print(f"rising edge in snr : {rising_edge_idx}")
     if (beep_slice):
+        print("here")
         noise_pwr = np.var( samples[falling_edge_idx:] )
         signal_pwr = np.var ( samples[0:falling_edge_idx])
     else:
@@ -24,7 +25,7 @@ def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
 
 class SampleProcessor:
     config: ProcessConfig
-    threshold: float = 0.5
+    threshold: float = 0.3
     beep_duration: float = 0.017 # seconds
     stateful_index: int
     beep_slice: False
@@ -87,7 +88,7 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def process(self, samples: SamplesT):
-        
+        #print(self.beep_slice)
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
@@ -138,7 +139,7 @@ class SampleProcessor:
         # To do - add logic to pass to next iteration number of samples between rising edge and chunk end
         # Then use that to make the calculations for beep duration and SNR
         if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
-            beep_slice = True
+            self.beep_slice = True
             self.distance_to_sample_end = len(samples+14)-rising_edge_idx[0]
             print("Slicing of beep encountered")
             return
@@ -147,6 +148,7 @@ class SampleProcessor:
             self.stateful_index += samples.size + 14
             print(samples.size+14)
             return
+        
         #print(f"passed len test for idx's")
         if rising_edge_idx[0] > falling_edge_idx[0]:
             falling_edge_idx = falling_edge_idx[1:]
@@ -155,9 +157,16 @@ class SampleProcessor:
         if rising_edge_idx[-1] > falling_edge_idx[-1]:
             rising_edge_idx = rising_edge_idx[:-1]
 
-        samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
-        time_between = 1/sample_rate * (samples_between-70)
-        BPM = 60 / time_between
+        if (self.beep_slice):
+            print(f"entered here")
+            samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
+            time_between = 1/sample_rate * (samples_between-70)
+            BPM = 60 / time_between
+        else:
+            samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+            time_between = 1/sample_rate * (samples_between-70)
+            BPM = 60 / time_between
+
         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
         print(f"printing prior to snr : {rising_edge_idx}")
         SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
