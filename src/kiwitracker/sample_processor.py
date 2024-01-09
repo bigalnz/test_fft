@@ -88,7 +88,6 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def process(self, samples: SamplesT):
-        #print(self.beep_slice)
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
@@ -106,7 +105,7 @@ class SampleProcessor:
 
         # if no beeps increment and exit early
         if len(beep_freqs) == 0:
-            self.stateful_index += (samples.size/100) + 14
+            self.stateful_index += (samples.size/100)
             return
         
         t = self.time_array
@@ -142,11 +141,12 @@ class SampleProcessor:
             self.beep_slice = True
             self.distance_to_sample_end = len(samples+14)-rising_edge_idx[0]
             print("Slicing of beep encountered")
+            # should i increment the counter here?
+            self.stateful_index += samples.size
             return
 
         if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
-            self.stateful_index += samples.size + 14
-            print(samples.size+14)
+            self.stateful_index += samples.size
             return
         
         #print(f"passed len test for idx's")
@@ -158,13 +158,16 @@ class SampleProcessor:
             rising_edge_idx = rising_edge_idx[:-1]
 
         if (self.beep_slice):
-            print(f"entered here")
-            samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
-            time_between = 1/sample_rate * (samples_between-70)
+            print(f"inside first if for BPM calcs")
+            print(f"self.stateful_index : {self.stateful_index} ** dist to end : {self.distance_to_sample_end} ** self.stateful_rising_edge : {self.stateful_rising_edge} ")
+            samples_between = (self.stateful_index-samples.size) - self.stateful_rising_edge
+            time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
+            print(f" BPM inside first if : {BPM}")
         else:
+            print(f"inside second if for BPM calcs")
             samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
-            time_between = 1/sample_rate * (samples_between-70)
+            time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
 
         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
@@ -177,5 +180,4 @@ class SampleProcessor:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
         print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         # increment sample count
-        self.stateful_index += samples.size + 14
-        print(samples.size+14)
+        self.stateful_index += samples.size
