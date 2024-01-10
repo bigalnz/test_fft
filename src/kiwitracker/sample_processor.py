@@ -20,6 +20,8 @@ def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     else:
         noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
         signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
+        print(f" noise_pwr : {noise_pwr}")
+        print(f" signal_pwr : {signal_pwr}")
     snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
     return snr_db
 
@@ -28,7 +30,9 @@ class SampleProcessor:
     threshold: float = 0.3
     beep_duration: float = 0.017 # seconds
     stateful_index: int
-    beep_slice: False
+    beep_slice: bool
+    rising_edge: int
+    falling_edge: int
 
     def __init__(self, config: ProcessConfig) -> None:
         self.config = config
@@ -38,6 +42,8 @@ class SampleProcessor:
         self._phasor = None
         self.stateful_rising_edge = 0
         self.beep_slice = False
+        self.rising_edge = 0
+        self.falling_edge = 0
 
     @property
     def sample_rate(self): return self.config.sample_config.sample_rate
@@ -134,45 +140,62 @@ class SampleProcessor:
         rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
-        # Detects if a beep was sliced by end of chunk
-        # To do - add logic to pass to next iteration number of samples between rising edge and chunk end
-        # Then use that to make the calculations for beep duration and SNR
-        if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
-            self.beep_slice = True
-            self.distance_to_sample_end = len(samples+14)-rising_edge_idx[0]
-            print("Slicing of beep encountered")
-            # should i increment the counter here?
+        if len(rising_edge_idx) > 0:
+            self.rising_edge = rising_edge_idx[0]
+
+        if len(falling_edge_idx) > 0:
+            self.falling_edge = falling_edge_idx[0]   
+
+        # If on FIRST rising edge - record edge and increment samples counter then exit early
+        if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
+            print("*** exit early *** ")
+            self.stateful_rising_edge = rising_edge_idx[0]
             self.stateful_index += samples.size
             return
 
-        if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+        # Detects if a beep was sliced by end of chunk
+        # To do - add logic to pass to next iteration number of samples between rising edge and chunk end
+        # Then use that to make the calculations for beep duration and SNR 
+        if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+            self.beep_slice = True
+            self.distance_to_sample_end = len(samples)-rising_edge_idx[0]
             self.stateful_index += samples.size
             return
         
-        #print(f"passed len test for idx's")
-        if rising_edge_idx[0] > falling_edge_idx[0]:
-            falling_edge_idx = falling_edge_idx[1:]
+        # only run these lines if not on a self.beep_slice
+        if not (self.beep_slice):
+            if (len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0):
+                #print("both zero")
+                self.stateful_index += samples.size
+                return
+            
+            if (rising_edge_idx[0] > falling_edge_idx[0]) :
+                falling_edge_idx = falling_edge_idx[1:]
 
-        # Remove stray rising edge at the end
-        if rising_edge_idx[-1] > falling_edge_idx[-1]:
-            rising_edge_idx = rising_edge_idx[:-1]
+            # Remove stray rising edge at the end
+            if rising_edge_idx[-1] > falling_edge_idx[-1]:
+                rising_edge_idx = rising_edge_idx[:-1]
 
         if (self.beep_slice):
-            print(f"inside first if for BPM calcs")
-            print(f"self.stateful_index : {self.stateful_index} ** dist to end : {self.distance_to_sample_end} ** self.stateful_rising_edge : {self.stateful_rising_edge} ")
-            samples_between = (self.stateful_index-samples.size) - self.stateful_rising_edge
+            print("beep slice is true - calculating BPM")
+            samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
-            print(f" BPM inside first if : {BPM}")
+            #print(f" BPM inside first if : {BPM}")
+            self.stateful_rising_edge = self.stateful_index-self.distance_to_sample_end
         else:
-            print(f"inside second if for BPM calcs")
+            print(f"beep slice is false - calculating BPM")
             samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
+            self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
 
-        self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
-        print(f"printing prior to snr : {rising_edge_idx}")
-        SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
+        #print(f"printing prior to snr : {rising_edge_idx}")
+        if (self.beep_slice):
+            SNR = snr(samples_for_snr, self.rising_edge-5, self.falling_edge+5, self.beep_slice)
+        else:
+            SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
+        
         if (self.beep_slice):
             BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
             self.beep_slice = False
@@ -181,3 +204,6 @@ class SampleProcessor:
         print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         # increment sample count
         self.stateful_index += samples.size
+        self.rising_edge = 0
+        self.falling_edge = 0
+
