@@ -10,6 +10,7 @@ import asyncio
 import json
 from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
 from kiwitracker.sample_reader import run_main, run_readonly, run_from_disk
+import sys
 
 def load_default_settings():
     try:
@@ -54,6 +55,20 @@ def main_gui(args):
             run_main(sample_config=sample_config, process_config=process_config)
         )
 
+
+
+class TextRedirector(object):
+    def __init__(self, widget):
+        self.widget = widget
+
+    def write(self, str):
+        self.widget.insert(tk.END, str)
+        self.widget.see(tk.END)
+
+    def flush(self):
+        pass
+
+
 # Tkinter GUI setup
 def run_gui():
     window = tk.Tk()
@@ -76,6 +91,7 @@ def run_gui():
             'bias_tee': bias_tee_var.get(),
             'carrier': float(carrier_entry.get())
         }
+        sys.stdout = TextRedirector(output_text)
         save_default_settings(args)
         main_gui(args)
 
@@ -112,6 +128,7 @@ def run_gui():
     carrier_entry = ttk.Entry(window)
 
     run_button = ttk.Button(window, text="Run", command=on_run_click)
+
     pad = ttk.Label(window, text="")
 
     defaults = load_default_settings()
@@ -132,6 +149,12 @@ def run_gui():
                sample_rate_entry, center_freq_entry, gain_entry, carrier_entry, bias_tee_check]
     buttons = [infile_button, outfile_button, pad, pad, pad, pad, pad, pad, run_button]
 
+    output_text = tk.Text(window, height=10)
+
+
+    # Place items into grid
+    output_text.grid(row=len(labels) + len(buttons), column=0, columnspan=3)
+    
     for i, label in enumerate(labels):
         label.grid(row=i, column=0, sticky='w', padx=10, pady=5)
 
