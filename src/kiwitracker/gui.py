@@ -10,19 +10,6 @@ from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
 from kiwitracker.sample_reader import run_main, run_readonly, run_from_disk
 
 
-def load_default_settings():
-    try:
-        with open('default_settings.json', 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        return {}  # Return an empty dictionary if file is not found
-
-def save_default_settings(defaults):
-    try:
-        with open('default_settings.json', 'w') as file:
-            return json.dump(defaults, file)
-    except FileNotFoundError:
-        print("Failed to save Defaults", FileNotFoundError)
 
 def main_gui(args):
     sample_config = SampleConfig(
@@ -54,6 +41,30 @@ def main_gui(args):
 
 
 
+
+class FileHandler():
+    def load_default_settings():
+        try:
+            with open('default_settings.json', 'r') as file:
+                return json.load(file)
+        except FileNotFoundError:
+            return {}  # Return an empty dictionary if file is not found
+
+    def save_default_settings(defaults):
+        try:
+            with open('default_settings.json', 'w') as file:
+                return json.dump(defaults, file)
+        except FileNotFoundError:
+            print("Failed to save Defaults", FileNotFoundError)
+
+    def select_file(self, entry):
+            filename = filedialog.askopenfilename()
+            entry.delete(0, tk.END)
+            entry.insert(0, filename)
+
+
+
+
 class TextRedirector(object):
     def __init__(self, widget, tag="stdout"):
         self.widget = widget
@@ -63,17 +74,18 @@ class TextRedirector(object):
         self.widget.configure(state="normal")
         self.widget.insert("end", str, (self.tag,))
         self.widget.configure(state="disabled")
-        #self.widget.insert(tk.END, str)
-        #self.widget.see(tk.END)
     def flush(self):
         pass
+
+
 
 class Gui:
     def __init__(self):
         self.window = tk.Tk()
+        self.file_handler = FileHandler()
         self.window.title("SDR Sample Processor")
         self.window.configure(background='white')
-        self.defaults = load_default_settings()
+        self.defaults = self.file_handler.load_default_settings()
         self.setup_widgets()
 
         num_rows = 9  # 
@@ -114,11 +126,6 @@ class Gui:
         self.window.columnconfigure(1, weight=3)
         self.window.columnconfigure(2, weight=1)
 
-    def select_file(self, entry):
-        filename = filedialog.askopenfilename()
-        entry.delete(0, tk.END)
-        entry.insert(0, filename)
-
     def on_run_click(self):
         self.run_button['state'] = 'disabled'  # Disable the run button
         args = {
@@ -133,7 +140,7 @@ class Gui:
             'carrier': float(self.carrier_entry.get())
         }
         sys.stdout = TextRedirector(self.output_text)
-        save_default_settings(args)
+        self.file_handler.save_default_settings(args)
         self.task_thread = threading.Thread(target=self.run, args=(args,))
         self.task_thread.start()
 
@@ -144,11 +151,11 @@ class Gui:
     def get_elements(self, window, defaults):
         self.infile_label = ttk.Label(window, text="Input File:")
         self.infile_entry = ttk.Entry(window)
-        self.infile_button = ttk.Button(window, text="Select File", command=lambda: self.select_file(self.infile_entry))
+        self.infile_button = ttk.Button(window, text="Select File", command=lambda: self.file_handler.select_file(self.infile_entry))
 
         self.outfile_label = ttk.Label(window, text="Output File:")
         self.outfile_entry = ttk.Entry(window)
-        self.outfile_button = ttk.Button(window, text="Select File", command=lambda: self.select_file(self.outfile_entry))
+        self.outfile_button = ttk.Button(window, text="Select File", command=lambda: self.file_handler.select_file(self.outfile_entry))
 
         self.max_samples_label = ttk.Label(window, text="Max Samples:")
         self.max_samples_entry = ttk.Entry(window)
