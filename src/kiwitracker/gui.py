@@ -1,16 +1,14 @@
-
-import tkinter as tk
-
-from tkinter import ttk
-from tkinter import filedialog
-from tkinter.ttk import *
-
-import argparse
+import sys
+import threading
 import asyncio
 import json
+
+import tkinter as tk
+from tkinter import filedialog, ttk
+
 from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
 from kiwitracker.sample_reader import run_main, run_readonly, run_from_disk
-import sys
+
 
 def load_default_settings():
     try:
@@ -24,9 +22,8 @@ def save_default_settings(defaults):
         with open('default_settings.json', 'w') as file:
             return json.dump(defaults, file)
     except FileNotFoundError:
-        print("Failed to save Defaults", e)
+        print("Failed to save Defaults", FileNotFoundError)
 
-# Modified main method to accept arguments directly
 def main_gui(args):
     sample_config = SampleConfig(
         sample_rate=args['sample_rate'], center_freq=args['center_freq'],
@@ -58,40 +55,60 @@ def main_gui(args):
 
 
 class TextRedirector(object):
-    def __init__(self, widget):
+    def __init__(self, widget, tag="stdout"):
         self.widget = widget
+        self.tag = tag
 
     def write(self, str):
-        self.widget.insert(tk.END, str)
-        self.widget.see(tk.END)
-
+        self.widget.configure(state="normal")
+        self.widget.insert("end", str, (self.tag,))
+        self.widget.configure(state="disabled")
+        #self.widget.insert(tk.END, str)
+        #self.widget.see(tk.END)
     def flush(self):
         pass
 
 class Gui:
     def __init__(self):
         self.window = tk.Tk()
-        self.window.minsize(800, 600)
         self.window.title("SDR Sample Processor")
+        self.window.configure(background='white')
         self.defaults = load_default_settings()
         self.setup_widgets()
-    
+
+        num_rows = 9  # 
+        num_columns = 3  # 
+
+        for i in range(num_rows):
+            self.window.rowconfigure(i, weight=1)  # Makes rows resizable
+        
+        self.window.columnconfigure(0, weight=0)  # Makes column non-resizable
+        self.window.columnconfigure(1, weight=1, minsize=80)  # Makes column resizable
+        self.window.columnconfigure(2, weight=0)  # Makes column non-resizable
+        self.window.columnconfigure(3, weight=3)  # Makes column resizable
+
+
         self.window.mainloop()
 
     def setup_widgets(self):
         self.labels, self.entries, self.buttons = self.get_elements(self.window, self.defaults)
         
-        self.output_text = tk.Text(self.window, height=30)
-        self.output_text.grid(row=len(self.labels) + len(self.buttons), column=0, columnspan=3)
+        self.output_text = tk.Text(self.window)
+        self.output_text.grid(row=0, column=3, rowspan=10, columnspan=3, sticky="nsew")
+
+
+        self.scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=self.output_text.yview)
+        self.scrollbar.grid(row=0, column=4, rowspan=10, sticky="ns")
+        self.output_text.configure(yscrollcommand=self.scrollbar.set)
 
         for i, label in enumerate(self.labels):
             label.grid(row=i, column=0, sticky='w', padx=10, pady=5)
 
         for i, entry in enumerate(self.entries):
-            entry.grid(row=i, column=1, padx=5)
+            entry.grid(row=i, column=1, padx=5, sticky='ew')
 
         for i, button in enumerate(self.buttons):
-            button.grid(row=i, column=2)
+            button.grid(row=i, column=2, padx=5)
 
         self.window.columnconfigure(0, weight=1)
         self.window.columnconfigure(1, weight=3)
@@ -103,6 +120,7 @@ class Gui:
         entry.insert(0, filename)
 
     def on_run_click(self):
+        self.run_button['state'] = 'disabled'  # Disable the run button
         args = {
             'infile': self.infile_entry.get(),
             'outfile': self.outfile_entry.get(),
@@ -116,8 +134,12 @@ class Gui:
         }
         sys.stdout = TextRedirector(self.output_text)
         save_default_settings(args)
+        self.task_thread = threading.Thread(target=self.run, args=(args,))
+        self.task_thread.start()
+
+    def run(self, args):
         main_gui(args)
-    
+        self.run_button['state'] = 'enabled'  # Disable the run button
 
     def get_elements(self, window, defaults):
         self.infile_label = ttk.Label(window, text="Input File:")
