@@ -1,1 +1,1 @@
-{"infile": "C:/Users/bubba/Documents/Other Code/test_fft/src/log_v15.npy", "outfile": "test", "max_samples": 90000000000000, "chunk_size": 65555, "sample_rate": 2048000.0, "center_freq": 100000000.0, "gain": 40.2, "bias_tee": false, "carrier": 95000000.0}
+{"infile": "C:/Users/bubba/Documents/Other Code/test_fft/src/log_v15.npy", "outfile": "test", "max_samples": null, "chunk_size": 65536, "sample_rate": 2048000.0, "center_freq": 160270968.0, "gain": 40.2, "bias_tee": false, "carrier": 160439730.0}

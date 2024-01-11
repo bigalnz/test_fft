@@ -68,109 +68,114 @@ class TextRedirector(object):
     def flush(self):
         pass
 
+class Gui:
+    def __init__(self):
+        self.window = tk.Tk()
+        self.window.minsize(800, 600)
+        self.window.title("SDR Sample Processor")
+        self.defaults = load_default_settings()
+        self.setup_widgets()
+    
+        self.window.mainloop()
 
-# Tkinter GUI setup
-def run_gui():
-    window = tk.Tk()
-    window.title("SDR Sample Processor")
+    def setup_widgets(self):
+        self.labels, self.entries, self.buttons = self.get_elements(self.window, self.defaults)
+        
+        self.output_text = tk.Text(self.window, height=30)
+        self.output_text.grid(row=len(self.labels) + len(self.buttons), column=0, columnspan=3)
 
-    def select_file(entry):
+        for i, label in enumerate(self.labels):
+            label.grid(row=i, column=0, sticky='w', padx=10, pady=5)
+
+        for i, entry in enumerate(self.entries):
+            entry.grid(row=i, column=1, padx=5)
+
+        for i, button in enumerate(self.buttons):
+            button.grid(row=i, column=2)
+
+        self.window.columnconfigure(0, weight=1)
+        self.window.columnconfigure(1, weight=3)
+        self.window.columnconfigure(2, weight=1)
+
+    def select_file(self, entry):
         filename = filedialog.askopenfilename()
         entry.delete(0, tk.END)
         entry.insert(0, filename)
 
-    def on_run_click():
+    def on_run_click(self):
         args = {
-            'infile': infile_entry.get(),
-            'outfile': outfile_entry.get(),
-            'max_samples': int(max_samples_entry.get()) if max_samples_entry.get() else None,
-            'chunk_size': int(chunk_size_entry.get()),
-            'sample_rate': float(sample_rate_entry.get()),
-            'center_freq': float(center_freq_entry.get()),
-            'gain': float(gain_entry.get()),
-            'bias_tee': bias_tee_var.get(),
-            'carrier': float(carrier_entry.get())
+            'infile': self.infile_entry.get(),
+            'outfile': self.outfile_entry.get(),
+            'max_samples': int(self.max_samples_entry.get()) if self.max_samples_entry.get() else None,
+            'chunk_size': int(self.chunk_size_entry.get()),
+            'sample_rate': float(self.sample_rate_entry.get()),
+            'center_freq': float(self.center_freq_entry.get()),
+            'gain': float(self.gain_entry.get()),
+            'bias_tee': self.bias_tee_var.get(),
+            'carrier': float(self.carrier_entry.get())
         }
-        sys.stdout = TextRedirector(output_text)
+        sys.stdout = TextRedirector(self.output_text)
         save_default_settings(args)
         main_gui(args)
-
-    # Create input fields
-    infile_label = ttk.Label(window, text="Input File:")
-    infile_entry = ttk.Entry(window)
-    infile_button = ttk.Button(window, text="Select File", command=lambda: select_file(infile_entry))
-
-    outfile_label = ttk.Label(window, text="Output File:")
-    outfile_entry = ttk.Entry(window)
-    outfile_button = ttk.Button(window, text="Select File", command=lambda: select_file(outfile_entry))
-
-    max_samples_label = ttk.Label(window, text="Max Samples:")
-    max_samples_entry = ttk.Entry(window)
-
-    chunk_size_label = ttk.Label(window, text="Chunk Size:")
-    chunk_size_entry = ttk.Entry(window)
-
-    sample_rate_label = ttk.Label(window, text="Sample Rate:")
-    sample_rate_entry = ttk.Entry(window)
-
-    center_freq_label = ttk.Label(window, text="Center Frequency:")
-    center_freq_entry = ttk.Entry(window)
-
-    gain_label = ttk.Label(window, text="Gain:")
-    gain_entry = ttk.Entry(window)
-
-    bias_tee_label = ttk.Label(window, text="Bias Tee:")
-    bias_tee_var = tk.BooleanVar()
-    bias_tee_check = ttk.Checkbutton(window, variable=bias_tee_var)
-
-    carrier_label = ttk.Label(window, text="Carrier Frequency:")
-    carrier_entry = ttk.Entry(window)
-    carrier_entry = ttk.Entry(window)
-
-    run_button = ttk.Button(window, text="Run", command=on_run_click)
-
-    pad = ttk.Label(window, text="")
-
-    defaults = load_default_settings()
-    infile_entry.insert(0, defaults.get('infile', ''))
-    outfile_entry.insert(0, defaults.get('outfile', ''))
-    max_samples_entry.insert(0, defaults.get('max_samples', ''))
-    chunk_size_entry.insert(0, defaults.get('chunk_size', ''))
-    sample_rate_entry.insert(0, defaults.get('sample_rate', ''))
-    center_freq_entry.insert(0, defaults.get('center_freq', ''))
-    gain_entry.insert(0, defaults.get('gain', ''))
-    bias_tee_var.set(defaults.get('bias_tee', False))
-    carrier_entry.insert(0, defaults.get('carrier', ''))
-
-    # Arrange widgets using grid
-    labels = [infile_label, outfile_label, max_samples_label, chunk_size_label,
-              sample_rate_label, center_freq_label, gain_label, carrier_label, bias_tee_label]
-    entries = [infile_entry, outfile_entry, max_samples_entry, chunk_size_entry,
-               sample_rate_entry, center_freq_entry, gain_entry, carrier_entry, bias_tee_check]
-    buttons = [infile_button, outfile_button, pad, pad, pad, pad, pad, pad, run_button]
-
-    output_text = tk.Text(window, height=10)
-
-
-    # Place items into grid
-    output_text.grid(row=len(labels) + len(buttons), column=0, columnspan=3)
     
-    for i, label in enumerate(labels):
-        label.grid(row=i, column=0, sticky='w', padx=10, pady=5)
 
-    for i, entry in enumerate(entries):
-        entry.grid(row=i, column=1, padx=5)
-        if entry is not bias_tee_check:
-            entry.insert(0, defaults.get(entry._name, ''))  # Use entry widget name to get default value
+    def get_elements(self, window, defaults):
+        self.infile_label = ttk.Label(window, text="Input File:")
+        self.infile_entry = ttk.Entry(window)
+        self.infile_button = ttk.Button(window, text="Select File", command=lambda: self.select_file(self.infile_entry))
 
-    for i, button in enumerate(buttons):
-        button.grid(row=i, column=2)
+        self.outfile_label = ttk.Label(window, text="Output File:")
+        self.outfile_entry = ttk.Entry(window)
+        self.outfile_button = ttk.Button(window, text="Select File", command=lambda: self.select_file(self.outfile_entry))
 
-    window.columnconfigure(0, weight=1)
-    window.columnconfigure(1, weight=3)
-    window.columnconfigure(2, weight=1)
+        self.max_samples_label = ttk.Label(window, text="Max Samples:")
+        self.max_samples_entry = ttk.Entry(window)
 
-    window.mainloop()
+        self.chunk_size_label = ttk.Label(window, text="Chunk Size:")
+        self.chunk_size_entry = ttk.Entry(window)
+
+        self.sample_rate_label = ttk.Label(window, text="Sample Rate:")
+        self.sample_rate_entry = ttk.Entry(window)
+
+        self.center_freq_label = ttk.Label(window, text="Center Frequency:")
+        self.center_freq_entry = ttk.Entry(window)
+
+        self.gain_label = ttk.Label(window, text="Gain:")
+        self.gain_entry = ttk.Entry(window)
+
+        self.bias_tee_label = ttk.Label(window, text="Bias Tee:")
+        self.bias_tee_var = tk.BooleanVar()
+        self.bias_tee_check = ttk.Checkbutton(window, variable=self.bias_tee_var)
+
+        self.carrier_label = ttk.Label(window, text="Carrier Frequency:")
+        self.carrier_entry = ttk.Entry(window)
+        self.carrier_entry = ttk.Entry(window)
+
+        self.run_button = ttk.Button(window, text="Run", command=self.on_run_click)
+
+        pad = ttk.Label(window, text="")
+        
+        def insert_default_value(entry, default_value):
+            if default_value is not None:
+                entry.insert(0, default_value)
+
+        insert_default_value(self.infile_entry, defaults.get('infile'))
+        insert_default_value(self.outfile_entry, defaults.get('outfile'))
+        insert_default_value(self.max_samples_entry, defaults.get('max_samples'))
+        insert_default_value(self.chunk_size_entry, defaults.get('chunk_size'))
+        insert_default_value(self.sample_rate_entry, defaults.get('sample_rate'))
+        insert_default_value(self.center_freq_entry, defaults.get('center_freq'))
+        insert_default_value(self.gain_entry, defaults.get('gain'))
+        self.bias_tee_var.set(defaults.get('bias_tee', False))
+        insert_default_value(self.carrier_entry, defaults.get('carrier'))
+
+        # Arrange widgets using grid
+        labels = [self.infile_label, self.outfile_label, self.max_samples_label, self.chunk_size_label,
+                self.sample_rate_label, self.center_freq_label, self.gain_label, self.carrier_label, self.bias_tee_label]
+        entries = [self.infile_entry, self.outfile_entry, self.max_samples_entry, self.chunk_size_entry,
+                self.sample_rate_entry, self.center_freq_entry, self.gain_entry, self.carrier_entry, self.bias_tee_check]
+        buttons = [self.infile_button, self.outfile_button, pad, pad, pad, pad, pad, pad, self.run_button]
+        return labels, entries, buttons
 
 if __name__ == "__main__":
-    run_gui()
+    gui_app = Gui()
