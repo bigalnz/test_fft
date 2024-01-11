@@ -14,6 +14,10 @@ from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 def snr(samples, rising_edge_idx, falling_edge_idx):
     noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
     signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
+
+    if noise_pwr == 0:
+        raise ValueError("Noise power is zero, SNR cannot be calculated")
+    
     snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
     return snr_db
 
@@ -79,6 +83,12 @@ class SampleProcessor:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
 
+    @property
+    def calculate_fft(self, sample_chunk):
+        fft_size = self.fft_size
+        return np.abs(np.fft.fftshift(np.fft.fft(sample_chunk))) / fft_size
+
+
     def process(self, samples: SamplesT):
         
         # look for the presence of a beep within the chunk and :
@@ -91,10 +101,12 @@ class SampleProcessor:
         num_ffts = len(samples) // fft_size # // is an integer division which rounds down
         fft_thresh = 0.1
         beep_freqs = []
+
         for i in range(num_ffts):
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             if np.max(fft) > fft_thresh:
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
+
         finish_time = time.time()
 
         # if not beeps increment and exit early
@@ -119,12 +131,7 @@ class SampleProcessor:
         samples = np.abs(samples)
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/10
-        # max_samp = np.max(samples)
-
-        # samples /= np.max(samples)
-        #plt.plot(samples)
-        #plt.show()
-
+        
         # Get a boolean array for all samples higher or lower than the threshold
         low_samples = samples < self.threshold
         high_samples = samples >= self.threshold
@@ -134,7 +141,14 @@ class SampleProcessor:
         # into the current array
         rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+        print("Rising Edge idx: ", rising_edge_idx)
+        print("Falling Edge idx: ", falling_edge_idx)
 
+        if self.stateful_rising_edge == 0 and len(rising_edge_idx) > 0:
+            # This is the first chunk with a detected beep, just set up the initial state
+            self.stateful_rising_edge = rising_edge_idx[0]
+            self.stateful_index += samples.size + 14
+            return
         if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
             self.stateful_index += samples.size + 14
             return
@@ -166,6 +180,7 @@ class SampleProcessor:
         #print("*****************************************")
 
         samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+        print("Samples between: ", samples_between)
         time_between = 1/sample_rate * samples_between
         BPM = 60 / time_between
         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
