@@ -3,13 +3,17 @@ import threading
 import asyncio
 import json
 
+import numpy as np
 import tkinter as tk
 from tkinter import filedialog, ttk
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.animation import FuncAnimation
+import matplotlib.pyplot as plt
+
 
 from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
 from kiwitracker.sample_reader import run_main, run_readonly, run_from_disk
-
-
 
 def main_gui(args):
     sample_config = SampleConfig(
@@ -19,12 +23,18 @@ def main_gui(args):
     process_config = ProcessConfig(
         sample_config=sample_config, carrier_freq=args['carrier'],
     )
-
+    samples = []
     if args['infile']:
+        samples = np.load(args['infile'])[:args['max_samples']]
+        plt.plot(samples)
+        plt.show()
         run_from_disk(
             process_config=process_config,
             filename=args['infile'],
+            samples=samples
         )
+        
+
     elif args['outfile']:
         assert args['max_samples'] is not None
         asyncio.run(
@@ -43,14 +53,14 @@ def main_gui(args):
 
 
 class FileHandler():
-    def load_default_settings():
+    def load_default_settings(self):
         try:
             with open('default_settings.json', 'r') as file:
                 return json.load(file)
         except FileNotFoundError:
             return {}  # Return an empty dictionary if file is not found
 
-    def save_default_settings(defaults):
+    def save_default_settings(self, defaults):
         try:
             with open('default_settings.json', 'w') as file:
                 return json.dump(defaults, file)
@@ -87,6 +97,11 @@ class Gui:
         self.window.configure(background='white')
         self.defaults = self.file_handler.load_default_settings()
         self.setup_widgets()
+
+
+        self.xdata, self.ydata = [], []
+
+        #self.ani = FuncAnimation(self.fig, self.update_plot, frames=self.data_stream, blit=True)
 
         num_rows = 9  # 
         num_columns = 3  # 
@@ -127,12 +142,11 @@ class Gui:
         self.window.columnconfigure(2, weight=1)
 
     def on_run_click(self):
-        self.run_button['state'] = 'disabled'  # Disable the run button
         args = {
             'infile': self.infile_entry.get(),
             'outfile': self.outfile_entry.get(),
-            'max_samples': int(self.max_samples_entry.get()) if self.max_samples_entry.get() else None,
-            'chunk_size': int(self.chunk_size_entry.get()),
+            'max_samples': int(float(self.max_samples_entry.get())) if self.max_samples_entry.get() else None,
+            'chunk_size': int(float(self.chunk_size_entry.get())),
             'sample_rate': float(self.sample_rate_entry.get()),
             'center_freq': float(self.center_freq_entry.get()),
             'gain': float(self.gain_entry.get()),
@@ -145,8 +159,10 @@ class Gui:
         self.task_thread.start()
 
     def run(self, args):
-        main_gui(args)
-        self.run_button['state'] = 'enabled'  # Disable the run button
+        self.run_button['state'] = 'disabled'  # Disable the run button
+        try: main_gui(args)
+        finally:
+            self.run_button['state'] = 'enabled'  # Enable the run button
 
     def get_elements(self, window, defaults):
         self.infile_label = ttk.Label(window, text="Input File:")
