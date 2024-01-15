@@ -1,9 +1,9 @@
 from .chicktimer import ChickTimer
 
-# 3 sec gap == 20BPM        ( marks start of CT sequence and after each 5 beep seperator )
-# 3.8 sec gap == 15.789BPM  ( after each number in number pairs )
-# 1.8 sec gap == 46.1538BPM ( between each beep of 5 beep seperators )
-# 0.8 sec gap == 75.00BPM ( between each beep of data beeps )
+# 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
+# 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
+# 1.8 sec gap == 46.1538BPM   ( between each beep of 5 beep seperators )
+# 0.8 sec gap == 75.00BPM     ( between each beep of data beeps )
 
 class BeepStateMachine:
 
