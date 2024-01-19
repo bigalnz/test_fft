@@ -12,6 +12,7 @@ class BeepStateMachine:
     gap_beep_rate_1_8sec: float = 46.13
     gap_beep_rate_0_8: float = 75.00
 
+
     def __init__(self, inital_state:str = "BACKGROUND"):
         self.state = inital_state
 
@@ -47,6 +48,7 @@ class BeepStateMachine:
             # if BPM is 15.78 - exit as last beep was last beep of that set
             if any(abs(BPM - self.gap_beep_rate_3_8sec ) < 0.5):
                 # write the number of beeps to the data class
+                print(f"Pair 1 Set 2 : {beep_count}")
                 beep_count = 0
                 self.state = "SEPERATOR"
                 return # this return needs to exit both loops?
