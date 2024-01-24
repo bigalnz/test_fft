@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
+import math
 
 SamplesT = npt.NDArray[np.complex128]
 """Alias for sample arrays"""
@@ -34,3 +35,6 @@ class ProcessConfig:
 
     num_samples_to_process: int = int(2.5e5)
     """Number of samples needed to process"""
+
+def channel_from_freq(freq):
+  return math.floor((freq - 160.1e6)/0.1e6)
