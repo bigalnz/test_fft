@@ -1,8 +1,13 @@
 from dataclasses import dataclass
+import datetime
 
 @dataclass
 class ChickTimer():
 
+    start_date_time : datetime.date = 0
+    finish_date_time : datetime.date = 0
+    channel : int = 0
+    carrier_freq : float = 0
     # eights sets of integers of two digits. Theese are the actual values not the transmitted values
     # so the 2 has already been subtracted.
     channel_freq :  float = 0
