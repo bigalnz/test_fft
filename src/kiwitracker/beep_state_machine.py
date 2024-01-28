@@ -1,5 +1,5 @@
-from chicktimer import ChickTimer
-from common import ProcessConfig
+from kiwitracker.chicktimer import ChickTimer
+from kiwitracker.common import ProcessConfig
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
