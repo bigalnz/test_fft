@@ -7,9 +7,9 @@ import numpy as np
 import numpy.typing as npt
 from scipy import signal
 import time
-
+import math
+from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
-
 
 def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     #print(f"rising edge in snr : {rising_edge_idx}")
@@ -44,6 +44,12 @@ class SampleProcessor:
         self.beep_slice = False
         self.rising_edge = 0
         self.falling_edge = 0
+        self.bsm = BeepStateMachine()
+
+    @property
+    def channel(self): 
+        """Channel Number from Freq"""
+        return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
 
     @property
     def sample_rate(self): return self.config.sample_config.sample_rate
@@ -201,7 +207,10 @@ class SampleProcessor:
             self.beep_slice = False
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
+        
         print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
+        self.bsm.process_input(BPM)
+
         # increment sample count
         self.stateful_index += samples.size
         self.rising_edge = 0
