@@ -94,18 +94,23 @@ class BeepStateMachine:
                 self.state = "NUMBER1"
                 self.pair_count += 1
                 return
-            if self.seperator_count > 6: 
+            if self.seperator_count > 5: 
                 print(f"Seperator count exceeded 5 - returning to background")
+                # reset everything for early bsm exit
                 self.state == "BACKGROUND"
+                self.number1_count = 1
+                self.number2_count = 1
+                self.seperator_count = 1
+                return
 
 
         
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
             print(f"*********** CT's have been recorded : {self.ct} **************")
-            self.number1_count = 0
-            self.number2_count = 0
-            self.seperator_count = 0
+            self.number1_count = 1
+            self.number2_count = 1
+            self.seperator_count = 1
             self.pair_count = 0
             self.state = "BACKGROUND"
             return
