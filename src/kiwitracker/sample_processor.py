@@ -14,14 +14,14 @@ from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     #print(f"rising edge in snr : {rising_edge_idx}")
     if (beep_slice):
-        print("here")
+        #print("here")
         noise_pwr = np.var( samples[falling_edge_idx:] )
         signal_pwr = np.var ( samples[0:falling_edge_idx])
     else:
         noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
         signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
-        print(f" noise_pwr : {noise_pwr}")
-        print(f" signal_pwr : {signal_pwr}")
+        #print(f" noise_pwr : {noise_pwr}")
+        #print(f" signal_pwr : {signal_pwr}")
     snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
     return snr_db
 
@@ -44,7 +44,7 @@ class SampleProcessor:
         self.beep_slice = False
         self.rising_edge = 0
         self.falling_edge = 0
-        self.bsm = BeepStateMachine()
+        self.bsm = BeepStateMachine(config)
 
     @property
     def channel(self): 
@@ -190,8 +190,10 @@ class SampleProcessor:
             #print(f" BPM inside first if : {BPM}")
             self.stateful_rising_edge = self.stateful_index-self.distance_to_sample_end
         else:
-            print(f"beep slice is false - calculating BPM")
+            #print(f"beep slice is false - calculating BPM")
             samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+            #print(f" new rising edge : {rising_edge_idx[0]+self.stateful_index}")
+            #print(f" old rising edge :  {self.stateful_rising_edge}")
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
             self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
