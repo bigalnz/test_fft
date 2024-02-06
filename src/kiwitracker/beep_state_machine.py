@@ -52,6 +52,8 @@ class BeepStateMachine:
                 # 3 secon pause encountered - indicates first set of digits
                 # change state and record carrier freq and channel No
                 # record start date time
+                # change state and record carrier freq and channel No
+                # record start date time
                 self.state = "NUMBER1"
                 self.ct.channel = self.channel
                 self.ct.carrier_freq = self.carrier_freq
