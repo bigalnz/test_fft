@@ -198,7 +198,7 @@ class SampleProcessor:
                 rising_edge_idx = rising_edge_idx[:-1]
 
         if (self.beep_slice):
-            print("beep slice is true - calculating BPM")
+            # print("beep slice is true - calculating BPM")
             samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between

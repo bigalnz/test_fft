@@ -8,8 +8,6 @@ from kiwitracker.common import ProcessConfig
 from datetime import datetime
 import math
 
-
-
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
 # 1.3 sec gap == 46.1538BPM   ( between each beep of 5 beep seperators )
@@ -51,10 +49,10 @@ class BeepStateMachine:
         
     def process_input(self, BPM: float) -> None|ChickTimer:
         if self.state == "BACKGROUND":
-            if any(abs(BPM-background_beep_rate) < 0.5 for background_beep_rate in [80, 46, 30] ):
+            if any(abs(BPM-background_beep_rate) < 1 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
                 return
-            if (abs(BPM - self.gap_beep_rate_3sec) < 0.5):
+            if (abs(BPM - self.gap_beep_rate_3sec) < 1 ):
                 # 3 secon pause encountered - indicates first set of digits
                 # change state and record carrier freq and channel No
                 # record start date time
@@ -105,7 +103,7 @@ class BeepStateMachine:
                 self.pair_count += 1
                 return
             if self.seperator_count > 5: 
-                print(f"Seperator count exceeded 5 - returning to background")
+                print(f"Seperator count (46.153BPM 1.3s) exceeded 5 - returning to background")
                 # reset everything for early bsm exit
                 self.state == "BACKGROUND"
                 self.number1_count = 1
@@ -113,8 +111,6 @@ class BeepStateMachine:
                 self.seperator_count = 1
                 return
 
-
-        
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
             print(f"*********** CT's have been recorded : {self.ct} **************")
