@@ -1,5 +1,10 @@
 from kiwitracker.chicktimer import ChickTimer
 from kiwitracker.common import ProcessConfig
+import datetime
+import math
+
+from kiwitracker.chicktimer import ChickTimer
+from kiwitracker.common import ProcessConfig
 from datetime import datetime
 import math
 
@@ -31,6 +36,16 @@ class BeepStateMachine:
         self.seperator_count = 1
         self.pair_count = 0
         self.ct = ChickTimer()
+    
+    @property
+    def channel(self): 
+        """Channel Number from Freq"""
+        return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
+    
+    @property
+    def carrier_freq(self):
+        """Center frequency of the carrier wave to process (in Hz)"""
+        return self.config.carrier_freq
         self.config = config
     
     @property
@@ -54,7 +69,12 @@ class BeepStateMachine:
                 # record start date time
                 # change state and record carrier freq and channel No
                 # record start date time
+                # change state and record carrier freq and channel No
+                # record start date time
                 self.state = "NUMBER1"
+                self.ct.channel = self.channel
+                self.ct.start_date_time = datetime.now()
+
                 self.ct.channel = self.channel
                 self.ct.carrier_freq = self.carrier_freq
                 print(f" ************ CT start ***********")
