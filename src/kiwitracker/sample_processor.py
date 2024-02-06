@@ -10,6 +10,7 @@ import time
 import math
 from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
+from datetime import datetime
 
 def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     #print(f"rising edge in snr : {rising_edge_idx}")
@@ -224,7 +225,7 @@ class SampleProcessor:
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
         
-        print(f" BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
+        print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         self.bsm.process_input(BPM)
 
         # increment sample count
