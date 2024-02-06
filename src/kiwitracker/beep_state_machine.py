@@ -36,11 +36,7 @@ class BeepStateMachine:
         self.seperator_count = 1
         self.pair_count = 0
         self.ct = ChickTimer()
-    
-    @property
-    def channel(self): 
-        """Channel Number from Freq"""
-        return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
+        self.config = config
     
     @property
     def carrier_freq(self):
@@ -52,11 +48,6 @@ class BeepStateMachine:
     def channel(self): 
         """Channel Number from Freq"""
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
-    
-    @property
-    def carrier_freq(self):
-        """Center frequency of the carrier wave to process (in Hz)"""
-        return self.config.carrier_freq
         
     def process_input(self, BPM: float) -> None|ChickTimer:
         if self.state == "BACKGROUND":
@@ -74,11 +65,8 @@ class BeepStateMachine:
                 self.state = "NUMBER1"
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
-
-                self.ct.channel = self.channel
                 self.ct.carrier_freq = self.carrier_freq
                 print(f" ************ CT start ***********")
-                self.ct.start_date_time = datetime.now()
                 return
     
         if self.state == "NUMBER1":
@@ -112,7 +100,7 @@ class BeepStateMachine:
                 self.seperator_count += 1
                 return
             if (self.seperator_count == 5): # check for 5 beeps in seperator - should I also check that the gap is 3s?
-                self.seperator_count = 0
+                self.seperator_count = 1
                 self.state = "NUMBER1"
                 self.pair_count += 1
                 return

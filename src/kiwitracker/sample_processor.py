@@ -27,7 +27,7 @@ def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
 
 class SampleProcessor:
     config: ProcessConfig
-    threshold: float = 0.3
+    threshold: float = 0.2
     beep_duration: float = 0.017 # seconds
     stateful_index: int
     beep_slice: bool
@@ -106,14 +106,26 @@ class SampleProcessor:
 
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
-        num_ffts = len(samples) // fft_size # // is an integer division which rounds down
+
+
+        size = fft_size # 8704
+        # step = self.sample_rate * self.beep_duration + 1000 
+        step = 6704
+        samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
+
+        num_ffts = len(samples_to_send_to_fft) # // is an integer division which rounds down
         fft_thresh = 0.1
         beep_freqs = []
+
+        i = 0 
         for i in range(num_ffts):
-            fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+
+            # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+            fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
             if np.max(fft) > fft_thresh:
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
+
 
         # if no beeps increment and exit early
         if len(beep_freqs) == 0:
@@ -134,6 +146,8 @@ class SampleProcessor:
 
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/10
+        #plt.plot(samples)
+        #plt.show()
         # max_samp = np.max(samples)
 
         # Get a boolean array for all samples higher or lower than the threshold

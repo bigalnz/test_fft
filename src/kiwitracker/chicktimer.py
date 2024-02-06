@@ -10,7 +10,6 @@ class ChickTimer():
     carrier_freq : float = 0
     # eights sets of integers of two digits. Theese are the actual values not the transmitted values
     # so the 2 has already been subtracted.
-    channel_freq :  float = 0
     days_since_change_of_state : int = 0
     days_since_hatch : int = 0
     days_since_desertion_alert : int = 0
