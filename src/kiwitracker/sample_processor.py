@@ -104,14 +104,13 @@ class SampleProcessor:
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
-
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
 
-
-        size = fft_size # 8704
+        # size = fft_size # 8704
+        size = 8192
         # step = self.sample_rate * self.beep_duration + 1000 
-        step = 6704
+        step = size // 5 # 50%
         samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
 
         num_ffts = len(samples_to_send_to_fft) # // is an integer division which rounds down
@@ -124,15 +123,19 @@ class SampleProcessor:
             # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
             if np.max(fft) > fft_thresh:
+                plt.plot(fft)
+                plt.show()
+                print(f"{np.median(fft)}")
+                print(f"{np.max(fft)}")
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
-
 
         # if no beeps increment and exit early
         if len(beep_freqs) == 0:
             self.stateful_index += (samples.size/100)
             return
-        
+
+        #print(f"{len(samples)}")
         t = self.time_array
         samples = samples * self.phasor
         # next two lines are band pass filter?
@@ -220,8 +223,11 @@ class SampleProcessor:
             SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
         
         if (self.beep_slice):
-            BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
-            self.beep_slice = False
+            if len(falling_edge_idx)!=0:
+                BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
+                self.beep_slice = False
+            else:
+                BEEP_DURATION = 0
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
         
@@ -232,4 +238,5 @@ class SampleProcessor:
         self.stateful_index += samples.size
         self.rising_edge = 0
         self.falling_edge = 0
+
 
