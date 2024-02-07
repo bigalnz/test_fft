@@ -110,7 +110,8 @@ class SampleProcessor:
         # size = fft_size # 8704
         size = 8192
         # step = self.sample_rate * self.beep_duration + 1000 
-        step = size // 5 # 50%
+        step = int(size//1.1)  # 50%
+        #print(f"{step}")
         samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
 
         num_ffts = len(samples_to_send_to_fft) # // is an integer division which rounds down
@@ -122,16 +123,20 @@ class SampleProcessor:
 
             # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
-            if np.max(fft) > fft_thresh:
-                plt.plot(fft)
-                plt.show()
-                print(f"{np.median(fft)}")
-                print(f"{np.max(fft)}")
+
+
+            if np.max(fft)/np.median(fft) > 5:
+            # if np.max(fft) > fft_thresh:
+                #plt.plot(fft)
+                #plt.show()
+                #print(f"{np.median(fft)}")
+                #print(f"{np.max(fft)}")
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
         # if no beeps increment and exit early
         if len(beep_freqs) == 0:
+            print(f"no beeps detected")
             self.stateful_index += (samples.size/100)
             return
 
