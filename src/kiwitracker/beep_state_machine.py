@@ -3,6 +3,7 @@ from kiwitracker.common import ProcessConfig
 from datetime import datetime
 import math
 import pprint
+import json
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
@@ -95,7 +96,7 @@ class BeepStateMachine:
             if self.seperator_count > 5:  # SEPERATOR COUNT EXCEED - SOMETHING WENT WRONG - ABORT
                 print(f"Seperator count (46.153BPM 1.3s) exceeded 5 - returning to background")
                 # reset everything for early bsm exit
-                self.state == "BACKGROUND"
+                self.state = "BACKGROUND"
                 self.number1_count = 1
                 self.number2_count = 1
                 self.seperator_count = 1
@@ -113,7 +114,7 @@ class BeepStateMachine:
             else:
                 print(f"No valid condition on seperators were found - exiting early")
                 # reset everything for early bsm exit
-                self.state == "BACKGROUND"
+                self.state = "BACKGROUND"
                 self.number1_count = 1
                 self.number2_count = 1
                 self.seperator_count = 1
@@ -123,6 +124,9 @@ class BeepStateMachine:
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
             pprint.pprint(self.ct)
+            filename = datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel)
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.ct, f)
             self.number1_count = 1
             self.number2_count = 1
             self.seperator_count = 1

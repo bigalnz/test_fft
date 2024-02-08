@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import datetime
+import json
 
 @dataclass
 class ChickTimer():
@@ -42,6 +43,11 @@ class ChickTimer():
                 self.mean_activity_last_four_days = value
             case _:
                 print("* * *  ERROR: Unknown field index passed into ChickTimer Class * * *")
+
+    def toJSON(self):
+            return json.dumps(self, default=lambda o: o.__dict__, 
+                sort_keys=True, indent=4)
+            
 
         
 
