@@ -53,6 +53,7 @@ class BeepStateMachine:
                 # 3 secon pause encountered - indicates first set of digits
                 # change state and record carrier freq and channel No
                 # record start date time
+                print(f"Got a 3 sec gap 20 BPM")
                 self.state = "NUMBER1"
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
@@ -62,22 +63,23 @@ class BeepStateMachine:
     
         if self.state == "NUMBER1":
             # check expected BPM and if so count and increment
-            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ):
+            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
                 self.number1_count += 1
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.0):
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.0): # 15 BPM
+                print(f"number 1 finished")
                 self.state = "NUMBER2"
                 return # this return needs to exit both loops?
        
         if self.state == "NUMBER2":
-            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ):
+            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
                 self.number2_count += 1
                 print(f"number 2 count : {self.number2_count}")
                 return
             # if BPM is 15.78 - exit as last beep was last beep of that set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.5):
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.5): # 15 BPM
                 self.ct.setField(self.pair_count, int(f"{self.number1_count}{self.number2_count}" ) )
                 print(f"CT so far : {self.ct} ")
                 self.number1_count = 1
@@ -90,15 +92,16 @@ class BeepStateMachine:
                 return
             
         if self.state == "SEPERATOR":
-            if self.seperator_count > 5: 
+            if self.seperator_count > 5:  # SEPERATOR COUNT EXCEED - SOMETHING WENT WRONG - ABORT
                 print(f"Seperator count (46.153BPM 1.3s) exceeded 5 - returning to background")
                 # reset everything for early bsm exit
                 self.state == "BACKGROUND"
                 self.number1_count = 1
                 self.number2_count = 1
                 self.seperator_count = 1
+                print("state on exit {self.state}")
                 return
-            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.0):
+            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.0): # 46 BPM 
                 self.seperator_count += 1
                 print(f"seperator count : {self.seperator_count}")
                 return
@@ -107,6 +110,15 @@ class BeepStateMachine:
                 self.state = "NUMBER1"
                 self.pair_count += 1
                 return
+            else:
+                print(f"No valid condition on seperators were found - exiting early")
+                # reset everything for early bsm exit
+                self.state == "BACKGROUND"
+                self.number1_count = 1
+                self.number2_count = 1
+                self.seperator_count = 1
+                return
+
 
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":

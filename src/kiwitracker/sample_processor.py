@@ -110,7 +110,7 @@ class SampleProcessor:
         # size = fft_size # 8704
         size = 8192
         # step = self.sample_rate * self.beep_duration + 1000 
-        step = int(size//1.1)  # 50%
+        step = int(size//1.1) 
         #print(f"{step}")
         samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
 
