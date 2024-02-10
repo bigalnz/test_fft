@@ -125,7 +125,7 @@ class SampleProcessor:
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
 
 
-            if np.max(fft)/np.median(fft) > 5:
+            if np.max(fft)/np.median(fft) > 20:
             # if np.max(fft) > fft_thresh:
                 #plt.plot(fft)
                 #plt.show()
@@ -136,7 +136,7 @@ class SampleProcessor:
 
         # if no beeps increment and exit early
         if len(beep_freqs) == 0:
-            print(f"no beeps detected")
+            #print(f"no beeps detected")
             self.stateful_index += (samples.size/100)
             return
 
@@ -237,6 +237,9 @@ class SampleProcessor:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
         
         print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
+        #if (BPM < 25):
+        #    plt.plot(fft)
+        #    plt.show()
         self.bsm.process_input(BPM)
 
         # increment sample count

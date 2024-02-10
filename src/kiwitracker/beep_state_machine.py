@@ -45,7 +45,6 @@ class BeepStateMachine:
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
     def process_input(self, BPM: float) -> None|ChickTimer:
-        print(f" self state  = {self.state}")
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
@@ -112,7 +111,7 @@ class BeepStateMachine:
                 self.pair_count += 1
                 return
             else:
-                print(f"No valid condition on seperators were found - exiting early")
+                print(f"* * *  ERROR: Beep State Machine - SEPERATOR had no valid condition met * * *")
                 # reset everything for early bsm exit
                 self.state = "BACKGROUND"
                 self.number1_count = 1
@@ -125,8 +124,9 @@ class BeepStateMachine:
         if self.state == "FINISHED":
             pprint.pprint(self.ct)
             filename = datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel)
+            self.ct.toJSON()
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(self.ct, f)
+                f.write(self.ct.toJSON())
             self.number1_count = 1
             self.number2_count = 1
             self.seperator_count = 1
