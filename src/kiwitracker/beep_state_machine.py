@@ -4,6 +4,7 @@ from datetime import datetime
 import math
 import pprint
 import json
+import numpy as np
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
@@ -32,6 +33,7 @@ class BeepStateMachine:
         self.pair_count = 0
         self.ct = ChickTimer()
         self.config = config
+        self.snrs = list()
     
     @property
     def carrier_freq(self):
@@ -44,7 +46,7 @@ class BeepStateMachine:
         """Channel Number from Freq"""
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
-    def process_input(self, BPM: float) -> None|ChickTimer:
+    def process_input(self, BPM: float, SNR: float) -> None|ChickTimer:
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
@@ -58,6 +60,7 @@ class BeepStateMachine:
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
                 self.ct.carrier_freq = self.carrier_freq
+                self.snrs.append(SNR)
                 print(f" ************ CT start ***********")
                 return
     
@@ -65,6 +68,7 @@ class BeepStateMachine:
             # check expected BPM and if so count and increment
             if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
                 self.number1_count += 1
+                self.snrs.append(SNR)
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
@@ -77,6 +81,7 @@ class BeepStateMachine:
             if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
                 self.number2_count += 1
                 print(f"number 2 count : {self.number2_count}")
+                self.snrs.append(SNR)
                 return
             # if BPM is 15.78 - exit as last beep was last beep of that set
             if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.5): # 15 BPM
@@ -122,8 +127,9 @@ class BeepStateMachine:
 
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
+            self.ct.snr = [np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs) ]
             pprint.pprint(self.ct)
-            filename = datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel)
+            filename = datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel) + '.json'
             self.ct.toJSON()
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(self.ct.toJSON())

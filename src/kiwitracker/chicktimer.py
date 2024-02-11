@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 import json
+from typing import List
 
 # eights sets of integers of two digits. Theese are the actual values not the transmitted values
 # so the 2 has already been subtracted.
@@ -9,7 +10,7 @@ class ChickTimer():
 
     start_date_time : datetime.date = 0
     finish_date_time : datetime.date = 0
-    snr : float = 0 # yet to work out best way to pass in
+    snr : list = field(default_factory=list) # yet to work out best way to pass in 
     # lat : float = 0
     # lon : float = 0
     channel : int = 0

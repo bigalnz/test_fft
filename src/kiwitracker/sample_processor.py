@@ -21,11 +21,9 @@ def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     else:
         noise_pwr = np.var( np.concatenate([samples[:rising_edge_idx], samples[falling_edge_idx:]]) )
         signal_pwr = np.var ( samples[rising_edge_idx:falling_edge_idx] )
-        #print(f" noise_pwr : {noise_pwr}")
-        #print(f" signal_pwr : {signal_pwr}")
     snr_db = 10 * np.log10 ( signal_pwr / noise_pwr )
     return snr_db
-
+  
 class SampleProcessor:
     config: ProcessConfig
     threshold: float = 0.2
@@ -46,6 +44,7 @@ class SampleProcessor:
         self.rising_edge = 0
         self.falling_edge = 0
         self.bsm = BeepStateMachine(config)
+        self.f = open('test_no_antenna.f32', 'wb')
 
     @property
     def channel(self): 
@@ -62,7 +61,11 @@ class SampleProcessor:
     def carrier_freq(self):
         """Center frequency of the carrier wave to process (in Hz)"""
         return self.config.carrier_freq
-
+    
+    @carrier_freq.setter
+    def carrier_freq(self, carrier_freq: float) -> None:
+        self.config.carrier_freq = carrier_freq
+        
     @property
     def freq_offset(self) -> float:
         """The offset (difference) between the sdr's center frequency and
@@ -70,6 +73,10 @@ class SampleProcessor:
         """
         fc = self.config.sample_config.center_freq
         return fc - self.carrier_freq
+    
+    @freq_offset.setter
+    def freq_offset(self, freq_offset: float) -> None:
+        self.carrier_freq = self.config.sample_config.center_freq + freq_offset
 
     @property
     def time_array(self) -> FloatArray:
@@ -100,15 +107,15 @@ class SampleProcessor:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
 
-    def process(self, samples: SamplesT):
+    def find_beep_freq(self, samples):
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
 
-        # size = fft_size # 8704
-        size = 8192
+        size = fft_size # 8704
+        #size = 8192
         # step = self.sample_rate * self.beep_duration + 1000 
         step = int(size//1.1) 
         #print(f"{step}")
@@ -124,23 +131,35 @@ class SampleProcessor:
             # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
 
-
             if np.max(fft)/np.median(fft) > 20:
             # if np.max(fft) > fft_thresh:
-                #plt.plot(fft)
+                fft_freqs = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
+                #plt.plot(fft_freqs, fft)
                 #plt.show()
                 #print(f"{np.median(fft)}")
                 #print(f"{np.max(fft)}")
                 beep_freqs.append(np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)[np.argmax(fft)])
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
+        if len(beep_freqs)!=0:
+            self.freq_offset = beep_freqs[0]
+            self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
+            print(f"i ran {beep_freqs[0]}")
+            return beep_freqs[0]
+
+        return 0
+
+    def process(self, samples: SamplesT):
+        
+        if (self.freq_offset==0):
+            self.find_beep_freq(samples)
+        
         # if no beeps increment and exit early
-        if len(beep_freqs) == 0:
+        """ if len(beep_freqs) == 0:
             #print(f"no beeps detected")
             self.stateful_index += (samples.size/100)
-            return
+            return """
 
-        #print(f"{len(samples)}")
         t = self.time_array
         samples = samples * self.phasor
         # next two lines are band pass filter?
@@ -151,15 +170,22 @@ class SampleProcessor:
         # recalculation of sample rate due to decimation
         sample_rate = self.sample_rate/100
         samples_for_snr = samples
+
+        #record this file in the field
+        #self.f.write(samples_for_snr.astype(np.complex64).tobytes())
+
         samples = np.abs(samples)
 
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/10
+        self.f.write(samples.astype(np.float32).tobytes())
+
         #plt.plot(samples)
         #plt.show()
         # max_samp = np.max(samples)
-
+        
         # Get a boolean array for all samples higher or lower than the threshold
+        self.threshold = np.median(samples) * 5 # go just above noise floor
         low_samples = samples < self.threshold
         high_samples = samples >= self.threshold
 
@@ -240,7 +266,7 @@ class SampleProcessor:
         #if (BPM < 25):
         #    plt.plot(fft)
         #    plt.show()
-        self.bsm.process_input(BPM)
+        self.bsm.process_input(BPM, SNR)
 
         # increment sample count
         self.stateful_index += samples.size

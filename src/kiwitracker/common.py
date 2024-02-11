@@ -30,7 +30,8 @@ class SampleConfig:
 class ProcessConfig:
     sample_config: SampleConfig
 
-    carrier_freq: float = 160_707_760
+    # carrier_freq: float = 160_707_760
+    carrier_freq: float = 160_270_968
     """Center frequency of the carrier wave to process (in Hz)"""
 
     num_samples_to_process: int = int(2.5e5)
