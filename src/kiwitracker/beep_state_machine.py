@@ -39,7 +39,7 @@ class BeepStateMachine:
     def carrier_freq(self):
         """Center frequency of the carrier wave to process (in Hz)"""
         return self.config.carrier_freq
-        self.config = config
+        
     
     @property
     def channel(self): 
@@ -72,7 +72,7 @@ class BeepStateMachine:
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.0): # 15 BPM
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.5): # 15 BPM
                 print(f"number 1 finished")
                 self.state = "NUMBER2"
                 return # this return needs to exit both loops?
@@ -127,9 +127,9 @@ class BeepStateMachine:
 
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
+            print([ np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs) ])
             self.ct.snr = [np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs) ]
-            pprint.pprint(self.ct)
-            filename = datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel) + '.json'
+            filename = 'captures/' + datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel) + '.json'
             self.ct.toJSON()
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(self.ct.toJSON())

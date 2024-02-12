@@ -44,7 +44,7 @@ class SampleProcessor:
         self.rising_edge = 0
         self.falling_edge = 0
         self.bsm = BeepStateMachine(config)
-        self.f = open('test_no_antenna.f32', 'wb')
+        self.f = open('testing_gain.fc32', 'wb')
 
     @property
     def channel(self): 
@@ -108,29 +108,28 @@ class SampleProcessor:
         return int(self.beep_duration * self.sample_rate / 2)
 
     def find_beep_freq(self, samples):
+        #print("find beep freq ran")
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
-
-        size = fft_size # 8704
-        #size = 8192
-        # step = self.sample_rate * self.beep_duration + 1000 
+        size = fft_size
         step = int(size//1.1) 
-        #print(f"{step}")
         samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
-
         num_ffts = len(samples_to_send_to_fft) # // is an integer division which rounds down
         fft_thresh = 0.1
         beep_freqs = []
 
         i = 0 
         for i in range(num_ffts):
-
             # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
             fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
-
+            
+            #plt.plot(fft)
+            #plt.show()
+            #print(f"{np.max(fft)/np.median(fft)}")
+            
             if np.max(fft)/np.median(fft) > 20:
             # if np.max(fft) > fft_thresh:
                 fft_freqs = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
@@ -144,16 +143,21 @@ class SampleProcessor:
         if len(beep_freqs)!=0:
             self.freq_offset = beep_freqs[0]
             self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
-            print(f"i ran {beep_freqs[0]}")
+            #print(f"i ran {beep_freqs[0]}")
+            #print(f"carrier freq is set to : {self.carrier_freq}")
             return beep_freqs[0]
 
         return 0
-
+    
     def process(self, samples: SamplesT):
-        
+        #print(f"this is start self freq offset {self.freq_offset}")
+        #print(f"this is start self carrier freq {self.carrier_freq}")
         if (self.freq_offset==0):
             self.find_beep_freq(samples)
         
+        if (self.freq_offset==0):
+            return
+
         # if no beeps increment and exit early
         """ if len(beep_freqs) == 0:
             #print(f"no beeps detected")
@@ -171,14 +175,16 @@ class SampleProcessor:
         sample_rate = self.sample_rate/100
         samples_for_snr = samples
 
-        #record this file in the field
-        #self.f.write(samples_for_snr.astype(np.complex64).tobytes())
+        #record this file in the field - for testing log with IQ values
+        self.f.write(samples_for_snr.astype(np.complex64).tobytes())
 
         samples = np.abs(samples)
 
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/10
-        self.f.write(samples.astype(np.float32).tobytes())
+
+        #for testing - log to file
+        #self.f.write(samples.astype(np.float32).tobytes())
 
         #plt.plot(samples)
         #plt.show()
