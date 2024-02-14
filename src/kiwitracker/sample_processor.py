@@ -118,7 +118,6 @@ class SampleProcessor:
         step = int(size//1.1) 
         samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
         num_ffts = len(samples_to_send_to_fft) # // is an integer division which rounds down
-        fft_thresh = 0.1
         beep_freqs = []
 
         i = 0 
@@ -130,7 +129,7 @@ class SampleProcessor:
             #plt.show()
             #print(f"{np.max(fft)/np.median(fft)}")
             
-            if np.max(fft)/np.median(fft) > 20:
+            if (np.max(fft)/np.median(fft)) > 20:
             # if np.max(fft) > fft_thresh:
                 fft_freqs = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
                 #plt.plot(fft_freqs, fft)
@@ -141,17 +140,15 @@ class SampleProcessor:
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
         if len(beep_freqs)!=0:
+            # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
             self.freq_offset = beep_freqs[0]
             self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
-            #print(f"i ran {beep_freqs[0]}")
-            #print(f"carrier freq is set to : {self.carrier_freq}")
             return beep_freqs[0]
 
         return 0
     
     def process(self, samples: SamplesT):
-        #print(f"this is start self freq offset {self.freq_offset}")
-        #print(f"this is start self carrier freq {self.carrier_freq}")
+
         if (self.freq_offset==0):
             self.find_beep_freq(samples)
         
@@ -202,6 +199,7 @@ class SampleProcessor:
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
         if len(rising_edge_idx) > 0:
+            #print(f"len rising edges idx {len(rising_edge_idx)}")
             self.rising_edge = rising_edge_idx[0]
 
         if len(falling_edge_idx) > 0:
@@ -209,18 +207,18 @@ class SampleProcessor:
 
         # If on FIRST rising edge - record edge and increment samples counter then exit early
         if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
-            print("*** exit early *** ")
+            #print("*** exit early *** ")
             self.stateful_rising_edge = rising_edge_idx[0]
             self.stateful_index += samples.size
             return
 
         # Detects if a beep was sliced by end of chunk
-        # To do - add logic to pass to next iteration number of samples between rising edge and chunk end
-        # Then use that to make the calculations for beep duration and SNR 
+        # Grabs the samples from rising edge of end of samples and passes them to next iteration using samples_between 
         if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
             self.beep_slice = True
             self.distance_to_sample_end = len(samples)-rising_edge_idx[0]
             self.stateful_index += samples.size
+            #print("beep slice condition ln 229 is true - calculating BPM")
             return
         
         # only run these lines if not on a self.beep_slice
@@ -238,14 +236,14 @@ class SampleProcessor:
                 rising_edge_idx = rising_edge_idx[:-1]
 
         if (self.beep_slice):
-            # print("beep slice is true - calculating BPM")
+            #print(f"beep slice is true ln 247")
             samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
             #print(f" BPM inside first if : {BPM}")
             self.stateful_rising_edge = self.stateful_index-self.distance_to_sample_end
         else:
-            #print(f"beep slice is false - calculating BPM")
+            #print(f"beep slice is false ln 254 - calculating BPM")
             samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
             #print(f" new rising edge : {rising_edge_idx[0]+self.stateful_index}")
             #print(f" old rising edge :  {self.stateful_rising_edge}")
@@ -262,12 +260,18 @@ class SampleProcessor:
         if (self.beep_slice):
             if len(falling_edge_idx)!=0:
                 BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
-                self.beep_slice = False
+                #self.beep_slice = False
             else:
                 BEEP_DURATION = 0
+                #print(f"setting beep slice false on ln 273")
+                #self.beep_slice = False
+
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
-        
+            #print(f"setting beep slice false on ln 277")
+            #self.beep_slice = False
+
+
         print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
         #if (BPM < 25):
         #    plt.plot(fft)
@@ -275,6 +279,7 @@ class SampleProcessor:
         self.bsm.process_input(BPM, SNR)
 
         # increment sample count
+        self.beep_slice = False
         self.stateful_index += samples.size
         self.rising_edge = 0
         self.falling_edge = 0

@@ -40,7 +40,6 @@ class BeepStateMachine:
         """Center frequency of the carrier wave to process (in Hz)"""
         return self.config.carrier_freq
         
-    
     @property
     def channel(self): 
         """Channel Number from Freq"""
@@ -72,7 +71,7 @@ class BeepStateMachine:
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.5): # 15 BPM
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.9): # 15 BPM
                 print(f"number 1 finished")
                 self.state = "NUMBER2"
                 return # this return needs to exit both loops?
@@ -84,7 +83,7 @@ class BeepStateMachine:
                 self.snrs.append(SNR)
                 return
             # if BPM is 15.78 - exit as last beep was last beep of that set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 1.5): # 15 BPM
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.5): # 15 BPM
                 self.ct.setField(self.pair_count, int(f"{self.number1_count}{self.number2_count}" ) )
                 print(f"CT so far : {self.ct} ")
                 self.number1_count = 1
@@ -104,9 +103,10 @@ class BeepStateMachine:
                 self.number1_count = 1
                 self.number2_count = 1
                 self.seperator_count = 1
+                self.ct = ChickTimer()
                 print("state on exit {self.state}")
                 return
-            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.0): # 46 BPM 
+            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.5): # 46 BPM 
                 self.seperator_count += 1
                 print(f"seperator count : {self.seperator_count}")
                 return
@@ -122,6 +122,7 @@ class BeepStateMachine:
                 self.number1_count = 1
                 self.number2_count = 1
                 self.seperator_count = 1
+                self.ct = ChickTimer()
                 return
 
 
@@ -138,4 +139,5 @@ class BeepStateMachine:
             self.seperator_count = 1
             self.pair_count = 0
             self.state = "BACKGROUND"
+            self.ct = ChickTimer()
             return

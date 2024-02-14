@@ -10,7 +10,7 @@ class ChickTimer():
 
     start_date_time : datetime.date = 0
     finish_date_time : datetime.date = 0
-    snr : list = field(default_factory=list) # yet to work out best way to pass in 
+    snr : list = field(default_factory=list)
     # lat : float = 0
     # lon : float = 0
     channel : int = 0
