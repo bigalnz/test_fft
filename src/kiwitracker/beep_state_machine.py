@@ -45,7 +45,7 @@ class BeepStateMachine:
         """Channel Number from Freq"""
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
-    def process_input(self, BPM: float, SNR: float) -> None|ChickTimer:
+    def process_input(self, BPM: float, SNR: float, lat=0, lon=0) -> None|ChickTimer:
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
@@ -56,6 +56,8 @@ class BeepStateMachine:
                 # record start date time
                 print(f"Got a 3 sec gap 20 BPM")
                 self.state = "NUMBER1"
+                self.ct.lon = lon
+                self.ct.lat = lat
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
                 self.ct.carrier_freq = self.carrier_freq

@@ -11,6 +11,9 @@ import math
 from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 from datetime import datetime
+import platform
+if (platform.system() == "Linux"):
+    import gpsd
 
 def snr(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     #print(f"rising edge in snr : {rising_edge_idx}")
@@ -45,6 +48,12 @@ class SampleProcessor:
         self.falling_edge = 0
         self.bsm = BeepStateMachine(config)
         self.f = open('testing_gain.fc32', 'wb')
+        if (platform.system() == "Linux"):
+            gpsd.connect()
+
+    @property
+    def platform_property(self):
+        return platform.system()
 
     @property
     def channel(self): 
@@ -272,11 +281,18 @@ class SampleProcessor:
             #self.beep_slice = False
 
 
-        print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec")
-        #if (BPM < 25):
-        #    plt.plot(fft)
-        #    plt.show()
-        self.bsm.process_input(BPM, SNR)
+        if (self.platform_property == "Linux"):
+            packet = gpsd.get_current()
+            latitude = packet.lat
+            longitude = packet.lon
+        else:
+            # use a default value for now
+            latitude = -36.8807
+            longitude = 174.924
+        print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
+        
+        # Send to Finite State Machine
+        self.bsm.process_input(BPM, SNR, latitude, longitude)
 
         # increment sample count
         self.beep_slice = False
