@@ -1,0 +1,19 @@
+{
+    "start": "20240212-214847",
+    "channel": 59,
+    "snr": [
+        16.66475460933406,
+        23.902547403282245,
+        26.131074991317575
+    ],
+    "carrier_freq": 160707900.55199358,
+    "days since change of state": 56,
+    "days_since_hatch": 45,
+    "days_since_desertion_alert": 22,
+    "time_of_emergence": 23,
+    "weeks_batt_life_left": 74,
+    "activity_yesterday": 64,
+    "activity_two_days_ago": 64,
+    "mean_activity_last_four_days": 64,
+    "finish": "20240212-215129"
+}
