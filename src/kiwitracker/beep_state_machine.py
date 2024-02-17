@@ -81,11 +81,12 @@ class BeepStateMachine:
         if self.state == "NUMBER2":
             if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
                 self.number2_count += 1
-                print(f"number 2 count : {self.number2_count}")
+                #print(f"number 2 count : {self.number2_count}")
                 self.snrs.append(SNR)
                 return
             # if BPM is 15.78 - exit as last beep was last beep of that set
             if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.5): # 15 BPM
+                print(f"number 2 finished")
                 self.ct.setField(self.pair_count, int(f"{self.number1_count}{self.number2_count}" ) )
                 print(f"CT so far : {self.ct} ")
                 self.number1_count = 1
@@ -106,7 +107,7 @@ class BeepStateMachine:
                 self.number2_count = 1
                 self.seperator_count = 1
                 self.ct = ChickTimer()
-                print("state on exit {self.state}")
+                print(f"state on exit {self.state}")
                 return
             if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.5): # 46 BPM 
                 self.seperator_count += 1

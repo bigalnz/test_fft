@@ -149,6 +149,7 @@ class SampleProcessor:
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
         if len(beep_freqs)!=0:
+            print(f"detected beep_freqs offsets is {beep_freqs}")
             # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
             self.freq_offset = beep_freqs[0]
             self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
@@ -163,6 +164,7 @@ class SampleProcessor:
         
         if (self.freq_offset==0):
             return
+
 
         # if no beeps increment and exit early
         """ if len(beep_freqs) == 0:
