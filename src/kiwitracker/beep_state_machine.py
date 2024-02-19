@@ -7,16 +7,16 @@ import json
 import numpy as np
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
-# 3.8 sec gap == 15.789BPM    ( after each number in number pairs )
+# 3.8 sec gap == 15 BPM    ( after each number in number pairs ** lowest seen 13.02 - 14 tolerance 3)
 # 1.3 sec gap == 46.1538BPM   ( between each beep of 5 beep seperators )
-# 0.8 sec gap == 75.00BPM     ( between each beep of data beeps )
+# 0.8 sec gap == 75.00BPM     ( between each beep of data beeps ** max seen so far 78.16 - lowest 69.77 - 73 tolerance 5.5 )
 
 class BeepStateMachine:
 
     gap_beep_rate_3sec: float = 20.00
-    gap_beep_rate_3_8sec: float = 15.789
+    gap_beep_rate_3_8sec: float = 14
     gap_beep_rate_1_3sec: float = 46.153
-    gap_beep_rate_0_8: float = 75.00
+    gap_beep_rate_0_8: float = 73.00 # change to 73 with tolerance of 5.5 78.5/67.5
 
     config: ProcessConfig
 
@@ -46,6 +46,7 @@ class BeepStateMachine:
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
     def process_input(self, BPM: float, SNR: float, lat=0, lon=0) -> None|ChickTimer:
+        print(f" *** Current State : {self.state} ***** ")
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
@@ -67,19 +68,19 @@ class BeepStateMachine:
     
         if self.state == "NUMBER1":
             # check expected BPM and if so count and increment
-            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
+            if (abs(BPM - self.gap_beep_rate_0_8) < 5.5 ): #75 BPM
                 self.number1_count += 1
                 self.snrs.append(SNR)
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
-            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 2.9): # 15 BPM
+            if (abs(BPM - self.gap_beep_rate_3_8sec ) < 3): # 15 BPM
                 print(f"number 1 finished")
                 self.state = "NUMBER2"
                 return # this return needs to exit both loops?
        
         if self.state == "NUMBER2":
-            if (abs(BPM - self.gap_beep_rate_0_8) < 4 ): #75 BPM
+            if (abs(BPM - self.gap_beep_rate_0_8) < 5.5 ): #75 BPM
                 self.number2_count += 1
                 #print(f"number 2 count : {self.number2_count}")
                 self.snrs.append(SNR)
