@@ -50,6 +50,7 @@ class SampleProcessor:
         self.f = open('testing_gain.fc32', 'wb')
         if (platform.system() == "Linux"):
             gpsd.connect()
+        self.sample_checker = 0
 
     @property
     def platform_property(self):
@@ -121,6 +122,8 @@ class SampleProcessor:
         # look for the presence of a beep within the chunk and :
         # (1) if beep found calculate the offset
         # (2) if beep not found iterate the counters and move on
+
+
         fft_size = self.fft_size
         f = np.linspace(self.sample_rate/-2, self.sample_rate/2, fft_size)
         size = fft_size
@@ -159,12 +162,13 @@ class SampleProcessor:
     
     def process(self, samples: SamplesT):
 
+
+
         if (self.freq_offset==0):
             self.find_beep_freq(samples)
         
         if (self.freq_offset==0):
             return
-
 
         # if no beeps increment and exit early
         """ if len(beep_freqs) == 0:
@@ -189,7 +193,8 @@ class SampleProcessor:
         samples = np.abs(samples)
 
         # smoothing
-        samples = signal.convolve(samples, [1]*10, 'valid')/10
+        samples = signal.convolve(samples, [1]*10, 'valid')/189
+
 
         #for testing - log to file
         #self.f.write(samples.astype(np.float32).tobytes())
@@ -220,7 +225,7 @@ class SampleProcessor:
         if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
             #print("*** exit early *** ")
             self.stateful_rising_edge = rising_edge_idx[0]
-            self.stateful_index += samples.size
+            self.stateful_index += samples.size + 14
             return
 
         # Detects if a beep was sliced by end of chunk
@@ -228,7 +233,7 @@ class SampleProcessor:
         if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
             self.beep_slice = True
             self.distance_to_sample_end = len(samples)-rising_edge_idx[0]
-            self.stateful_index += samples.size
+            self.stateful_index += samples.size + 14 
             #print("beep slice condition ln 229 is true - calculating BPM")
             return
         
@@ -236,7 +241,7 @@ class SampleProcessor:
         if not (self.beep_slice):
             if (len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0):
                 #print("both zero")
-                self.stateful_index += samples.size
+                self.stateful_index += samples.size + 14
                 return
             
             if (rising_edge_idx[0] > falling_edge_idx[0]) :
@@ -298,7 +303,7 @@ class SampleProcessor:
 
         # increment sample count
         self.beep_slice = False
-        self.stateful_index += samples.size
+        self.stateful_index += samples.size + 14
         self.rising_edge = 0
         self.falling_edge = 0
 
