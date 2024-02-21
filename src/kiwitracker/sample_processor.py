@@ -193,7 +193,7 @@ class SampleProcessor:
             #self.f2.write(self.test_samp.astype(np.complex128).tobytes, allow_pickle=False)
             np.save(self.f2, self.test_samp, allow_pickle=False) """
 
-        np.save(self.f2, samples, allow_pickle=False)
+        #np.save(self.f2, samples, allow_pickle=False)
     
         if (self.freq_offset==0):
             self.find_beep_freq(samples)

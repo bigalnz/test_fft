@@ -548,7 +548,9 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 
 
 def run_from_disk(process_config: ProcessConfig, filename: str):
+    samples = np.load(filename)
     processor = SampleProcessor(process_config)
+<<<<<<< HEAD
     start_time = time.time()
     
     samples = []
@@ -568,11 +570,14 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
     samples = np.concatenate(samples)
     samples = np.reshape(samples, -1)
 
+=======
+    #start_time = time.time()
+>>>>>>> parent of 5c5d7a0 (Load files to/from numpy)
     for ix in range(0, samples.size, processor.num_samples_to_process ):
+        
         processor.process(samples[ix:ix+processor.num_samples_to_process])
-
-    finish_time = time.time()
-    print(f" run time is {finish_time-start_time}")
+        #finish_time = time.time()
+        # print(f" run time is {finish_time-start_time}")
 
 
 async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
