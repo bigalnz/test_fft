@@ -548,14 +548,32 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 
 
 def run_from_disk(process_config: ProcessConfig, filename: str):
-    samples = np.load(filename)
     processor = SampleProcessor(process_config)
-    #start_time = time.time()
+    start_time = time.time()
+    
+    samples = []
+    f = open(filename, 'rb')
+    while True:
+        try:
+            chunk = np.load(f)
+            print("Loading ", chunk.shape, " Samples from disk")
+            samples.append(chunk)
+        except EOFError:
+            print("End of File")
+            break
+
+    print(len(samples)) 
+
+    samples = np.concatenate(samples)
+    samples = np.reshape(samples, -1)
+
+    print(samples.shape)
+
     for ix in range(0, samples.size, processor.num_samples_to_process ):
-        
         processor.process(samples[ix:ix+processor.num_samples_to_process])
-        #finish_time = time.time()
-        # print(f" run time is {finish_time-start_time}")
+
+    finish_time = time.time()
+    print(f" run time is {finish_time-start_time}")
 
 
 async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
