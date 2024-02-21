@@ -562,9 +562,11 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
             print("End of File")
             break
 
+    if (len(samples) == 0):
+        raise Exception(f"0 Samples loaded from file '{filename}'. Please check that the provided file has data in it.")
+
     samples = np.concatenate(samples)
-    samples = np.reshape(samples, -1) 
-    print("Loaded ", samples.shape, " Samples total.")
+    samples = np.reshape(samples, -1)
 
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         processor.process(samples[ix:ix+processor.num_samples_to_process])
