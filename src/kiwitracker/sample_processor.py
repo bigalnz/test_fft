@@ -2,12 +2,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import asyncio
 from matplotlib import pyplot as plt
+import logging
+import os
 
 import numpy as np
 import numpy.typing as npt
 from scipy import signal
 import time
 import math
+import itertools
+import statistics
 from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.common import SamplesT, FloatArray, ProcessConfig
 from datetime import datetime
@@ -48,9 +52,17 @@ class SampleProcessor:
         self.falling_edge = 0
         self.bsm = BeepStateMachine(config)
         self.f = open('testing_gain.fc32', 'wb')
+        self.f2 = open('missing_beeps.fc128', 'wb')
         if (platform.system() == "Linux"):
             gpsd.connect()
         self.sample_checker = 0
+        # create logger (in the constructor, line 53ish)
+        self.logger = logging.getLogger('KiwiTracker')
+        self.beep_idx = 0
+
+        self.test_samp = np.array(0)
+        self.save_flag = False
+
 
     @property
     def platform_property(self):
@@ -152,7 +164,13 @@ class SampleProcessor:
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
         if len(beep_freqs)!=0:
-            print(f"detected beep_freqs offsets is {beep_freqs}")
+            bp = np.array(beep_freqs)
+            bp = bp + self.config.sample_config.center_freq
+            bp = bp.astype(np.int64)
+            beep_freqs_singular = [statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f+5000)//10000)]
+            self.logger.info(f"detected beep_freqs offsets is {beep_freqs}")
+            self.logger.info(f"detected beep_freqs_singular offsets is {beep_freqs_singular}")
+            
             # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
             self.freq_offset = beep_freqs[0]
             self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
@@ -162,10 +180,24 @@ class SampleProcessor:
     
     def process(self, samples: SamplesT):
 
+        #for testing - log to file
+        #self.f2.write(samples.astype(np.complex128).tobytes(), allow_pickle=False)
+        #np.save(self.f2, samples, allow_pickle=False)
 
+        """         save_flag = False
 
+        if (self.stateful_index < 50000 and not save_flag):
+            self.test_samp = np.append(self.test_samp, samples)
+        else:
+            save_flag = True
+            #self.f2.write(self.test_samp.astype(np.complex128).tobytes, allow_pickle=False)
+            np.save(self.f2, self.test_samp, allow_pickle=False) """
+
+        #np.save(self.f2, samples, allow_pickle=False)
+    
         if (self.freq_offset==0):
             self.find_beep_freq(samples)
+
         
         if (self.freq_offset==0):
             return
@@ -182,22 +214,21 @@ class SampleProcessor:
         h = self.fir
         samples = signal.convolve(samples, h, 'valid')
         # decimation
-        samples = samples[::100]
         # recalculation of sample rate due to decimation
         sample_rate = self.sample_rate/100
         samples_for_snr = samples
 
         #record this file in the field - for testing log with IQ values
-        self.f.write(samples_for_snr.astype(np.complex64).tobytes())
+        self.f.write(samples_for_snr.astype(np.complex128))
+        samples = samples[::100]
 
         samples = np.abs(samples)
 
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'valid')/189
 
-
         #for testing - log to file
-        #self.f.write(samples.astype(np.float32).tobytes())
+        self.f.write(samples.astype(np.float32).tobytes())
 
         #plt.plot(samples)
         #plt.show()
@@ -223,7 +254,7 @@ class SampleProcessor:
 
         # If on FIRST rising edge - record edge and increment samples counter then exit early
         if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
-            #print("*** exit early *** ")
+            print("*** exit early *** ")
             self.stateful_rising_edge = rising_edge_idx[0]
             self.stateful_index += samples.size + 14
             return
@@ -231,10 +262,11 @@ class SampleProcessor:
         # Detects if a beep was sliced by end of chunk
         # Grabs the samples from rising edge of end of samples and passes them to next iteration using samples_between 
         if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+            self.beep_idx = (rising_edge_idx[0]+self.stateful_index)
             self.beep_slice = True
             self.distance_to_sample_end = len(samples)-rising_edge_idx[0]
             self.stateful_index += samples.size + 14 
-            #print("beep slice condition ln 229 is true - calculating BPM")
+            print("beep slice condition ln 229 is true - calculating BPM")
             return
         
         # only run these lines if not on a self.beep_slice
@@ -253,14 +285,15 @@ class SampleProcessor:
 
         if (self.beep_slice):
             #print(f"beep slice is true ln 247")
-            samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge
+            samples_between = (self.stateful_index-self.distance_to_sample_end) - self.stateful_rising_edge            
             time_between = 1/sample_rate * (samples_between)
             BPM = 60 / time_between
             #print(f" BPM inside first if : {BPM}")
             self.stateful_rising_edge = self.stateful_index-self.distance_to_sample_end
         else:
             #print(f"beep slice is false ln 254 - calculating BPM")
-            samples_between =  (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+            samples_between = (rising_edge_idx[0]+self.stateful_index) - self.stateful_rising_edge
+            self.beep_idx = (rising_edge_idx[0]+self.stateful_index)
             #print(f" new rising edge : {rising_edge_idx[0]+self.stateful_index}")
             #print(f" old rising edge :  {self.stateful_rising_edge}")
             time_between = 1/sample_rate * (samples_between)
@@ -296,7 +329,9 @@ class SampleProcessor:
             # use a default value for now
             latitude = -36.8807
             longitude = 174.924
-        print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
+        
+        #print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
+        self.logger.info(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude} | IDX : {self.stateful_index: 5.4f} | BEEP IDX : {self.beep_idx}")
         
         # Send to Finite State Machine
         self.bsm.process_input(BPM, SNR, latitude, longitude)

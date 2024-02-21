@@ -5,6 +5,9 @@ import asyncio
 import concurrent.futures
 import numpy as np
 import rtlsdr
+import logging
+import os
+from datetime import datetime
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
@@ -39,6 +42,7 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task|None = None
+        self.logger = logging.getLogger('KiwiTracker')
 
     @property
     def sample_rate(self): return self.sample_config.sample_rate
@@ -212,7 +216,10 @@ class SampleReader:
             sdr.set_bias_tee(True)
 
         # NOTE: Just for debug purposes. This might help with your gain issue
-        print(f'{sdr.sample_rate=}, {sdr.center_freq=}, {sdr.gain=}')
+        self.logger.info(f" RUN TIME START {datetime.now()} \n")
+        self.logger.info(f' ****************************************************************************************************** ')
+        self.logger.info(f' ******* SAMPLING RATE : {sdr.sample_rate}, | CENTER FREQ: {sdr.center_freq}, | GAIN {sdr.gain}  ****** ')
+        self.logger.info(f' ****************************************************************************************************** ')
         print(f'{self.gain_values_db=}')
 
     def close(self):
@@ -405,6 +412,30 @@ class SampleBuffer:
 
 
 def main():
+
+    # Setup Logging
+    # create logger with 'my_application'
+    logger = logging.getLogger('KiwiTracker')
+    logger.setLevel(logging.DEBUG)
+
+    # create file handler which logs even debug messages
+    print(os.getcwd())
+    fh = logging.FileHandler('kiwitracker.log')
+    fh.setLevel(logging.DEBUG)
+
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
     p = argparse.ArgumentParser()
     p.add_argument(
         '-f', '--from-file',
@@ -488,6 +519,8 @@ def main():
         )
 
 
+
+
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
     chunk_size = sample_config.read_size
     nrows = max_samples // sample_config.read_size
@@ -517,11 +550,11 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 def run_from_disk(process_config: ProcessConfig, filename: str):
     samples = np.load(filename)
     processor = SampleProcessor(process_config)
-    start_time = time.time()
+    #start_time = time.time()
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         
         processor.process(samples[ix:ix+processor.num_samples_to_process])
-        finish_time = time.time()
+        #finish_time = time.time()
         # print(f" run time is {finish_time-start_time}")
 
 
@@ -537,7 +570,7 @@ async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
             samples = await buffer.get(processor.num_samples_to_process)
             start_time = time.time()
             await asyncio.to_thread(processor.process, samples)
-            finish_time = time.time() - start_time
+            #finish_time = time.time() - start_time
             # print(f" prcoessor took : {finish_time}")
 
 

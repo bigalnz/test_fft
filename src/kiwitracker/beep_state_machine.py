@@ -46,7 +46,8 @@ class BeepStateMachine:
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
     def process_input(self, BPM: float, SNR: float, lat=0, lon=0) -> None|ChickTimer:
-        print(f" *** Current State : {self.state} ***** ")
+        if self.state in ["NUMBER1", "NUMBER2", "SEPERATOR", "FINISHED"]:
+            print(f" *** Current State : {self.state} ***** ")
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit

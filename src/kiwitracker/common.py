@@ -25,6 +25,9 @@ class SampleConfig:
     bias_tee_enable: bool = False
     """Enable bias tee"""
 
+    location: str = "Ponui"
+    """Set population location"""
+
 
 @dataclass
 class ProcessConfig:
