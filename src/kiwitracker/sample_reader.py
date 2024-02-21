@@ -550,29 +550,7 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 def run_from_disk(process_config: ProcessConfig, filename: str):
     samples = np.load(filename)
     processor = SampleProcessor(process_config)
-<<<<<<< HEAD
-    start_time = time.time()
-    
-    samples = []
-    f = open(filename, 'rb')
-    while True:
-        try:
-            chunk = np.load(f)
-            print("Loading ", chunk.shape, " Samples from disk")
-            samples.append(chunk)
-        except EOFError:
-            print("End of File")
-            break
-
-    if (len(samples) == 0):
-        raise Exception(f"0 Samples loaded from file '{filename}'. Please check that the provided file has data in it.")
-
-    samples = np.concatenate(samples)
-    samples = np.reshape(samples, -1)
-
-=======
     #start_time = time.time()
->>>>>>> parent of 5c5d7a0 (Load files to/from numpy)
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         
         processor.process(samples[ix:ix+processor.num_samples_to_process])
