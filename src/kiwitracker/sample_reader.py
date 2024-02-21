@@ -556,18 +556,14 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
     while True:
         try:
             chunk = np.load(f)
-            print("Loading ", chunk.shape, " Samples from disk")
+            print("Loading ", chunk.shape, " Samples from file")
             samples.append(chunk)
         except EOFError:
             print("End of File")
             break
 
-    print(len(samples)) 
-
     samples = np.concatenate(samples)
-    samples = np.reshape(samples, -1)
-
-    print(samples.shape)
+    samples = np.reshape(samples, -1) print("Loaded ", samples.shape, " Samples total.")
 
     for ix in range(0, samples.size, processor.num_samples_to_process ):
         processor.process(samples[ix:ix+processor.num_samples_to_process])
