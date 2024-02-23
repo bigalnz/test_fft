@@ -45,7 +45,7 @@ def clipping(samples, rising_edge_idx, falling_edge_idx, beep_slice):
     # *************************************
     rising_edge_idx = rising_edge_idx*100
     falling_edge_idx = falling_edge_idx*100
-    clipping = np.sqrt(np.mean(samples[rising_edge_idx:falling_edge_idx]))
+    clipping = np.mean(samples[rising_edge_idx:falling_edge_idx])
     clipping = np.sqrt(np.square(np.real(clipping))+np.square(np.imag(clipping)))
     print(clipping)
     return clipping
@@ -273,7 +273,7 @@ class SampleProcessor:
 
         # If no rising or falling edges detected - exit early increment counter and move on
         if (len(rising_edge_idx) == 0 and len(falling_edge_idx) == 0):
-            print("no beeps in this chunk - move on")
+            #print("no beeps in this chunk - move on")
             #self.stateful_rising_edge = rising_edge_idx[0]
             self.stateful_index += samples.size # + 9
             return
@@ -340,7 +340,7 @@ class SampleProcessor:
             SNR = snr(samples_for_snr, self.rising_edge-5, self.falling_edge+5, self.beep_slice)
         else:
             SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
-            # CLIPPING = clipping(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
+            CLIPPING = clipping(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
         
         if (self.beep_slice):
             if len(falling_edge_idx)!=0:
