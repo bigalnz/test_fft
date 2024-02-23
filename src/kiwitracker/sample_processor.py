@@ -340,7 +340,7 @@ class SampleProcessor:
             SNR = snr(samples_for_snr, self.rising_edge-5, self.falling_edge+5, self.beep_slice)
         else:
             SNR = snr(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
-            CLIPPING = clipping(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
+            # CLIPPING = clipping(samples_for_snr, rising_edge_idx[0]-5, falling_edge_idx[0]+5, self.beep_slice)
         
         if (self.beep_slice):
             if len(falling_edge_idx)!=0:
