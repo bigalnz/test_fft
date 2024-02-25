@@ -45,7 +45,7 @@ class BeepStateMachine:
         """Channel Number from Freq"""
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
-    def process_input(self, BPM: float, SNR: float, lat=0, lon=0) -> None|ChickTimer:
+    def process_input(self, BPM: float, SNR: float, dbfs: float,  lat=0, lon=0) -> None|ChickTimer:
         if self.state in ["NUMBER1", "NUMBER2", "SEPERATOR", "FINISHED"]:
             print(f" *** Current State : {self.state} ***** ")
         if self.state == "BACKGROUND":
@@ -60,6 +60,7 @@ class BeepStateMachine:
                 self.state = "NUMBER1"
                 self.ct.lon = lon
                 self.ct.lat = lat
+                self.ct.dbfs = dbfs
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
                 self.ct.carrier_freq = self.carrier_freq

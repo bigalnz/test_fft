@@ -11,6 +11,7 @@ class ChickTimer():
     start_date_time : datetime.date = 0
     finish_date_time : datetime.date = 0
     snr : list = field(default_factory=list)
+    dbfs : float = 0
     lat : float = 0
     lon : float = 0
     channel : int = 0
@@ -51,6 +52,7 @@ class ChickTimer():
             return json.dumps({"start" : self.start_date_time.strftime("%Y%m%d-%H%M%S"), \
                                "channel" : self.channel, \
                                  "snr" : self.snr, \
+                                 "dbfs" : self.dbfs, \
                                  "carrier_freq" :  self.carrier_freq, \
                                  "days since change of state" : self.days_since_change_of_state, \
                                  "days_since_hatch" : self.days_since_hatch, \
