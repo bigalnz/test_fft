@@ -26,17 +26,10 @@ def snr(high_samples, low_samples):
     return snr_db
 
 def clipping(high_samples):
-    # *************************************
-    # Any value over 0.5 is too high. Over 0.9 = saturation
-    # *************************************
-    #clipping_max = np.max(np.abs(samples)[rising_edge_idx:falling_edge_idx])
     clipping_max = np.max(high_samples)
     return clipping_max
 
 def dBFS(high_samples):
-    # *************************************
-    # Closer to 0 == stronger
-    # *************************************
     pwr = np.square(high_samples)
     pwr = np.average(pwr)
     pwr_dbfs = pwr_dBFS = 10 * np.log10(pwr/1)
@@ -193,15 +186,6 @@ class SampleProcessor:
         return 0
     
     def process(self, samples: SamplesT):
-
-        #print(f"this is i : {self.i}")
-        #self.i = self.i + len(samples)
-
-        #for testing - log to file
-        #self.f2.write(samples.astype(np.complex128).tobytes(), allow_pickle=False)
-        #np.save(self.f2, samples, allow_pickle=False)
-
-        #np.save(self.f2, samples, allow_pickle=False)
     
         if (self.freq_offset==0):
             self.find_beep_freq(samples)
@@ -212,7 +196,6 @@ class SampleProcessor:
         # **************************************************
         # Use this blockto save to file without pickle issue
         # **************************************************
-
         """if (self.stateful_index < 100000 and not self.save_flag):
             self.test_samp = np.append(self.test_samp, samples)
             #print(len(self.test_samp))
@@ -228,29 +211,19 @@ class SampleProcessor:
         # next two lines are band pass filter?
         h = self.fir
         samples = signal.convolve(samples, h, 'same')
-
         # decimation
         # recalculation of sample rate due to decimation
         sample_rate = self.sample_rate/100
 
-        #samples_for_snr = samples
-        #print(len(samples_for_snr))
-
         #record this file in the field - for testing log with IQ values
         #self.f.write(samples_for_snr.astype(np.complex128))
         samples = samples[::100]
-
         samples = np.abs(samples)
-
         # smoothing
         samples = signal.convolve(samples, [1]*10, 'same')/189
        
         #for testing - log to file
         #self.f.write(samples.astype(np.float32).tobytes())
-
-        #plt.plot(samples)
-        #plt.show()
-        #max_samp = np.max(samples)
         
         # Get a boolean array for all samples higher or lower than the threshold
         self.threshold = np.median(samples) * 3 # go just above noise floor
@@ -262,8 +235,6 @@ class SampleProcessor:
         # into the current array
         rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
         falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
-
-        #print(f" size of risig edges {len(rising_edge_idx)} and falling {len(falling_edge_idx)} ")
 
         if len(rising_edge_idx) > 0:
             #print(f"len rising edges idx {len(rising_edge_idx)}")
@@ -296,12 +267,11 @@ class SampleProcessor:
             return
         
         # only run these lines if not on a self.beep_slice
+        # not on a beep slice, but missing either a rising or falling edge
+        # is this ever true?
         if not (self.beep_slice):
             if (len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0):
-                #print("both zero")
-                #print(f" stateful index pre : {self.stateful_index}")
                 self.stateful_index += samples.size  # + 9
-                #print(f" stateful index after : {self.stateful_index}")
                 return
             
             if (rising_edge_idx[0] > falling_edge_idx[0]) :
@@ -324,61 +294,19 @@ class SampleProcessor:
             BPM = 60 / time_between
             self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
 
-        # SNR, PWR, CLIPPING CALCULATIONS
-        # USE DECIMATED VALUES
-        # SNR NEEDS ALL. CLIPPING AND PWR ONLY NEED HIGH SAMPS
-        # SUGGEST SNR(high_samps, low_samps)
-        # PWR and CLIPPING(high_samps)    
-        
-        # WRITE HERE HOW I WILL GET HIGH_SAMPS AND LOW SAMPS
-        # ONE FOR BEEP SLICE TRUE AND ONE WHEN NOT
+        # GET HIGH AND LOW SAMPLES IN THERE OWN ARRAYS FOR CALC ON SNR, DBFS, CLIPPING
         if (self.beep_slice):
             high_samples = np.concatenate((self.first_half_of_sliced_beep, samples[:self.falling_edge]))
             low_samples = samples[self.falling_edge:]
-            #plt.plot(high_samples)
-            #plt.show()
-            #plt.plot(low_samples)
-            #plt.axvline(x = len(self.first_half_of_sliced_beep), color = 'b', label = 'axvline - full height')
-            #plt.show()
         else:
             high_samples = samples[self.rising_edge:self.falling_edge]
             low_samples = np.concatenate((samples[:self.rising_edge], samples[self.falling_edge:]))
-            #plt.plot(high_samples)
-            #plt.show()
-            #plt.plot(low_samples)
-            #plt.axvline(x = self.rising_edge, color = 'b', label = 'axvline - full height')
-            #plt.show()
-
-        #if (self.beep_slice):
-            #samples = np.concatenate((self.first_half_of_sliced_beep, samples))
-            #plt.plot(self.first_half_of_sliced_beep)
-            #plt.show()
-            #plt.plot(samples)
-            #plt.show()
-            #print(f"self.rising_edge : {self.rising_edge}")
-            #print(f"self.falling_edge : {self.falling_edge}")
-            #SNR = snr(samples, 20, self.falling_edge-20, self.beep_slice)
-            #CLIPPING = clipping(samples_for_snr, self.rising_edge_idx+5, self.falling_edge_idx-5, self.beep_slice)
-            #DBFS = dBFS(samples_for_snr, self.rising_edge_idx+5, self.falling_edge_idx-5, self.beep_slice)
-        #else:
-            #print(f"self.rising_edge : {self.rising_edge}")
-            #print(f"self.falling_edge : {self.falling_edge}")
-            #plt.plot(samples)
-            #plt.axvline(x = self.rising_edge, color = 'b', label = 'axvline - full height')
-            #plt.axvline(x = self.falling_edge, color = 'r', label = 'axvline - full height')
-            #plt.show()
-            #SNR = snr(samples, self.rising_edge+5, self.falling_edge-5, self.beep_slice)
-            #CLIPPING = clipping(samples_for_snr, rising_edge_idx[0]+5, falling_edge_idx[0]-5, self.beep_slice)
-            #DBFS = dBFS(samples_for_snr, rising_edge_idx[0]+5, falling_edge_idx[0]-5, self.beep_slice)
         
         SNR = snr(high_samples, low_samples)
-        #print({SNR})
         DBFS = dBFS(high_samples)
-        #print({DBFS})
         CLIPPING = clipping(high_samples)
-        #print({CLIPPING})
 
-
+        # BEEP DURATION
         if (self.beep_slice):
             if len(falling_edge_idx)!=0:
                 BEEP_DURATION = (falling_edge_idx[0]+self.distance_to_sample_end) / sample_rate
@@ -387,12 +315,9 @@ class SampleProcessor:
                 BEEP_DURATION = 0
                 #print(f"setting beep slice false on ln 273")
                 #self.beep_slice = False
-
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
-            #print(f"setting beep slice false on ln 277")
-            #self.beep_slice = False
-
+            
         if (self.platform_property == "Linux"):
             packet = gpsd.get_current()
             latitude = packet.lat
@@ -403,9 +328,7 @@ class SampleProcessor:
             longitude = 174.924
         
         #print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
-        self.logger.info(f" DATE : {datetime.now()} | BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
-        #self.logger.info(f" DATE : {datetime.now()} | BPM : {BPM: 5.2f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f}")
-
+        self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
         
         # Send to Finite State Machine
         self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)

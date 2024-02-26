@@ -219,6 +219,7 @@ class SampleReader:
         self.logger.info(f" RUN TIME START {datetime.now()} \n")
         self.logger.info(f' ****************************************************************************************************** ')
         self.logger.info(f' ******* SAMPLING RATE : {sdr.sample_rate}, | CENTER FREQ: {sdr.center_freq}, | GAIN {sdr.gain}  ****** ')
+        self.logger.info(f' ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** ')
         self.logger.info(f' ****************************************************************************************************** ')
         print(f'{self.gain_values_db=}')
 
