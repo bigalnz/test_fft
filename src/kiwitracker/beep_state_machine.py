@@ -155,8 +155,11 @@ class BeepStateMachine:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(self.ct.toJSON())
             headers = {'Content-Type': 'application/json', 'Accept': '*/*'} 
-            req = requests.post('http://localhost:8080/', data = self.ct.toJSON(), headers=headers)
-            self.logger.info(f"Status Code: {req.status_code}, Response: {req.json}")
+            try:
+                req = requests.post('http://localhost:8080/', data = self.ct.toJSON(), headers=headers)
+                self.logger.info(f"Status Code: {req.status_code}, Response: {req.json}")
+            except:
+                print(f"JSON could not be sent")
             self.number1_count = 1
             self.number2_count = 1
             self.seperator_count = 1
