@@ -5,18 +5,19 @@ import math
 import pprint
 import json
 import numpy as np
+import requests
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15 BPM    ( after each number in number pairs ** lowest seen 13.02 - 14 tolerance 3)
 # 1.3 sec gap == 46.1538BPM   ( between each beep of 5 beep seperators )
-# 0.8 sec gap == 75.00BPM     ( between each beep of data beeps ** max seen so far 78.16 - lowest 69.77 - 73 tolerance 5.5 )
+# 0.8 sec gap == 73.00BPM     ( between each beep of data beeps ** max seen so far 78.16 - lowest 69.77 - 73 tolerance 5.5 )
 
 class BeepStateMachine:
 
     gap_beep_rate_3sec: float = 20.00
     gap_beep_rate_3_8sec: float = 14
     gap_beep_rate_1_3sec: float = 46.153
-    gap_beep_rate_0_8: float = 73.00 # change to 73 with tolerance of 5.5 78.5/67.5
+    gap_beep_rate_0_8: float = 73.00 # change to 73 with tolerance of 8 81/65
 
     config: ProcessConfig
 
@@ -46,8 +47,12 @@ class BeepStateMachine:
         return math.floor((self.config.carrier_freq - 160.11e6)/0.01e6)
         
     def process_input(self, BPM: float, SNR: float, dbfs: float,  lat=0, lon=0) -> None|ChickTimer:
-        if self.state in ["NUMBER1", "NUMBER2", "SEPERATOR", "FINISHED"]:
-            print(f" *** Current State : {self.state} ***** ")
+        if self.state in ["NUMBER1" or "NUMBER2"]:
+            self.logger.info(f" *** Current State : {self.state} // {self.number1_count} || {self.number2_count} ***** ")
+        if self.state("SEPERATOR"):
+            self.logger.info(f"SEP COUNT : {self.seperator_count}")
+        if self.state("FINISHED"):
+            self.logger.info(f" FINISHED STATE {self.ct.toJSON()}")
         if self.state == "BACKGROUND":
             if any(abs(BPM-background_beep_rate) < 2.5 for background_beep_rate in [80, 46, 30] ):
                 # background beep rate, do nothing, return nothing, exit
@@ -60,7 +65,7 @@ class BeepStateMachine:
                 self.state = "NUMBER1"
                 self.ct.lon = lon
                 self.ct.lat = lat
-                self.ct.dbfs = dbfs
+                self.ct.dbfs = round(dbfs, 2)
                 self.ct.channel = self.channel
                 self.ct.start_date_time = datetime.now()
                 self.ct.carrier_freq = self.carrier_freq
@@ -70,19 +75,20 @@ class BeepStateMachine:
     
         if self.state == "NUMBER1":
             # check expected BPM and if so count and increment
-            if (abs(BPM - self.gap_beep_rate_0_8) < 5.5 ): #75 BPM
+            if (abs(BPM - self.gap_beep_rate_0_8) < 8 ): #75 BPM
                 self.number1_count += 1
                 self.snrs.append(SNR)
                 #print(f"number 1 count : {self.number1_count}")
                 return
             # if BPM is 15.78 - exit as that was last beep of the set
             if (abs(BPM - self.gap_beep_rate_3_8sec ) < 3): # 15 BPM
-                print(f"number 1 finished")
+                print(f"number 1 finished : {self.number1_count}")
                 self.state = "NUMBER2"
                 return # this return needs to exit both loops?
        
         if self.state == "NUMBER2":
-            if (abs(BPM - self.gap_beep_rate_0_8) < 5.5 ): #75 BPM
+            print(f" in here **** : {abs(BPM - self.gap_beep_rate_0_8)}")
+            if (abs(BPM - self.gap_beep_rate_0_8) < 8 ): #75 BPM
                 self.number2_count += 1
                 #print(f"number 2 count : {self.number2_count}")
                 self.snrs.append(SNR)
@@ -96,7 +102,7 @@ class BeepStateMachine:
                 self.number2_count = 1
                 if (self.pair_count == 7): # exit if last pair
                     self.state = "FINISHED"
-                    self.ct.finish_date_time = datetime.now()
+                    self.ct.end_date_time = datetime.now()
                     return
                 self.state = "SEPERATOR"
                 return
@@ -112,15 +118,21 @@ class BeepStateMachine:
                 self.ct = ChickTimer()
                 print(f"state on exit {self.state}")
                 return
-            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.5): # 46 BPM 
-                self.seperator_count += 1
-                print(f"seperator count : {self.seperator_count}")
-                return
-            if (self.seperator_count == 5): # check for 5 beeps in seperator - should I also check that the gap is 3s?
+            #if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.5): # 46 BPM ONLY
+            if (abs(BPM - self.gap_beep_rate_3sec) < 2 and self.seperator_count == 5): # Got 5 beeps (46 or 75) and checking 3s gap to end seperator
                 self.seperator_count = 1
                 self.state = "NUMBER1"
                 self.pair_count += 1
                 return
+            if (abs(BPM - self.gap_beep_rate_1_3sec) < 2.5 or abs(BPM - self.gap_beep_rate_0_8) < 8): # 46 OR 75 BPM 
+                self.seperator_count += 1
+                print(f"seperator count : {self.seperator_count}")
+                return
+                """if (self.seperator_count == 5): # check for 5 beeps in seperator - should I also check that the gap is 3s?
+                self.seperator_count = 1
+                self.state = "NUMBER1"
+                self.pair_count += 1
+                return"""
             else:
                 print(f"* * *  ERROR: Beep State Machine - SEPERATOR had no valid condition met * * *")
                 # reset everything for early bsm exit
@@ -135,11 +147,14 @@ class BeepStateMachine:
         # Check we have 8 pairs of numbers and a 3 sec end pause
         if self.state == "FINISHED":
             print([ np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs) ])
-            self.ct.snr = [np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs) ]
+            self.ct.snr = np.round( [np.min(self.snrs), np.mean(self.snrs), np.max(self.snrs)], decimals = 2 ).tolist()
             filename = 'captures/' + datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + 'Ch' + str(self.channel) + '.json'
             self.ct.toJSON()
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(self.ct.toJSON())
+            headers = {'Content-Type': 'application/json', 'Accept': '*/*'} 
+            req = requests.post('http://localhost:8080/', data = self.ct.toJSON(), headers=headers)
+            self.logger.info(f"Status Code: {req.status_code}, Response: {req.json}")
             self.number1_count = 1
             self.number2_count = 1
             self.seperator_count = 1

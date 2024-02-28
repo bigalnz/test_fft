@@ -218,7 +218,7 @@ class SampleReader:
         # NOTE: Just for debug purposes. This might help with your gain issue
         self.logger.info(f" RUN TIME START {datetime.now()} \n")
         self.logger.info(f' ****************************************************************************************************** ')
-        self.logger.info(f' ******* SAMPLING RATE : {sdr.sample_rate}, | CENTER FREQ: {sdr.center_freq}, | GAIN {sdr.gain}  ****** ')
+        self.logger.info(f' *******          SAMPLING RATE : {sdr.sample_rate}  | CENTER FREQ: {sdr.center_freq}  | GAIN {sdr.gain}                ****** ')
         self.logger.info(f' ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** ')
         self.logger.info(f' ****************************************************************************************************** ')
         print(f'{self.gain_values_db=}')
@@ -546,7 +546,8 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 
 
 def run_from_disk(process_config: ProcessConfig, filename: str):
-    samples = np.load(filename)
+    #samples = np.load(filename, allow_pickle=True)
+    samples = np.fromfile(filename)
     processor = SampleProcessor(process_config)
     start_time = time.time()
     for ix in range(0, samples.size, processor.num_samples_to_process ):

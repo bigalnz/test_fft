@@ -9,7 +9,7 @@ from typing import List
 class ChickTimer():
 
     start_date_time : datetime.date = 0
-    finish_date_time : datetime.date = 0
+    end_date_time : datetime.date = 0
     snr : list = field(default_factory=list)
     dbfs : float = 0
     lat : float = 0
@@ -49,12 +49,14 @@ class ChickTimer():
                 print("* * *  ERROR: Unknown field index passed into ChickTimer Class * * *")
 
     def toJSON(self):
-            return json.dumps({"start" : self.start_date_time.strftime("%Y%m%d-%H%M%S"), \
+            return json.dumps({"start_date_time" : self.start_date_time.strftime("%Y%m%d-%H%M%S"), \
                                "channel" : self.channel, \
                                  "snr" : self.snr, \
                                  "dbfs" : self.dbfs, \
+                                 "lat" : self.lat, \
+                                 "lon" : self.lon, \
                                  "carrier_freq" :  self.carrier_freq, \
-                                 "days since change of state" : self.days_since_change_of_state, \
+                                 "days_since_change_of_state" : self.days_since_change_of_state, \
                                  "days_since_hatch" : self.days_since_hatch, \
                                  "days_since_desertion_alert" : self.days_since_desertion_alert, \
                                  "time_of_emergence" : self.time_of_emergence, \
@@ -63,7 +65,7 @@ class ChickTimer():
                                  "activity_yesterday" : self.activity_yesterday, \
                                  "activity_two_days_ago" : self.activity_two_days_ago, \
                                  "mean_activity_last_four_days" : self.mean_activity_last_four_days, \
-                                 "finish" : self.finish_date_time.strftime("%Y%m%d-%H%M%S")}, \
+                                 "end_date_time" : self.end_date_time.strftime("%Y%m%d-%H%M%S")}, \
                                 indent = 4)
             
 

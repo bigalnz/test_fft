@@ -56,8 +56,8 @@ class SampleProcessor:
         self.rising_edge = 0
         self.falling_edge = 0
         self.bsm = BeepStateMachine(config)
-        #self.f = open('testing_gain.fc32', 'wb')
-        #self.f2 = open('normal_beeps.fc32', 'wb')
+        #self.f = open('testing_file.fc32', 'wb')
+        #self.f2 = open('ct_80.fc32', 'wb')
         if (platform.system() == "Linux"):
             gpsd.connect()
         self.sample_checker = 0
@@ -193,13 +193,17 @@ class SampleProcessor:
         if (self.freq_offset==0):
             return
 
+
+        #record this file in the field - for testing log with IQ values
+        #self.f.write(samples.astype(np.complex128))
+
         # **************************************************
         # Use this blockto save to file without pickle issue
         # **************************************************
-        """if (self.stateful_index < 100000 and not self.save_flag):
+        """if (self.stateful_index < 150000 and not self.save_flag):
             self.test_samp = np.append(self.test_samp, samples)
             #print(len(self.test_samp))
-        elif(self.stateful_index > 100000 and not self.save_flag):
+        elif(self.stateful_index > 150000 and not self.save_flag):
             #self.f2.write(self.test_samp.astype(np.complex128).tobytes, allow_pickle=False)
             #print(len(self.test_samp))
             np.save(self.f2, self.test_samp, allow_pickle=False)
@@ -216,7 +220,7 @@ class SampleProcessor:
         sample_rate = self.sample_rate/100
 
         #record this file in the field - for testing log with IQ values
-        #self.f.write(samples_for_snr.astype(np.complex128))
+        #self.f.write(samples.astype(np.complex128))
         samples = samples[::100]
         samples = np.abs(samples)
         # smoothing
@@ -328,7 +332,7 @@ class SampleProcessor:
             longitude = 174.924
         
         #print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
-        self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
+        self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
         
         # Send to Finite State Machine
         self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)
