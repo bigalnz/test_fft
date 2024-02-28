@@ -6,6 +6,7 @@ import pprint
 import json
 import numpy as np
 import requests
+import logging
 
 # 3 sec gap == 20BPM          ( marks start of CT sequence and after each 5 beep seperator )
 # 3.8 sec gap == 15 BPM    ( after each number in number pairs ** lowest seen 13.02 - 14 tolerance 3)
@@ -35,6 +36,7 @@ class BeepStateMachine:
         self.ct = ChickTimer()
         self.config = config
         self.snrs = list()
+        self.logger = logging.getLogger('KiwiTracker')
     
     @property
     def carrier_freq(self):
