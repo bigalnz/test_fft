@@ -49,7 +49,7 @@ class BeepStateMachine:
     def process_input(self, BPM: float, SNR: float, dbfs: float,  lat=0, lon=0) -> None|ChickTimer:
         if self.state in ["NUMBER1" or "NUMBER2"]:
             self.logger.info(f" *** Current State : {self.state} // {self.number1_count} || {self.number2_count} ***** ")
-        if self.state("SEPERATOR"):
+        if self.state["SEPERATOR"]:
             self.logger.info(f"SEP COUNT : {self.seperator_count}")
         if self.state("FINISHED"):
             self.logger.info(f" FINISHED STATE {self.ct.toJSON()}")
