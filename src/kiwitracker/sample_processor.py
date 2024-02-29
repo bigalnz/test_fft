@@ -342,7 +342,7 @@ class SampleProcessor:
 
         normalized_BPMs = min(self.valid_BPMs, key=lambda x:abs(x-BPM)) 
         self.decoder.send(normalized_BPMs)
-        self.logger.info(f" Normalised BP : {normalized_BPMs} Input BPN : {BPM} current decoder state :{self.decoder.current_state}" )
+        self.logger.info(f" Normalised BP : {normalized_BPMs} Input BPM : {BPM: 5.2f} current decoder state :{self.decoder.current_state}" )
 
         if(normalized_BPMs==20):
             print(self.decoder.ct)
