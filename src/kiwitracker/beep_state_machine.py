@@ -89,7 +89,7 @@ class BeepStateMachine:
                 return # this return needs to exit both loops?
        
         if self.state == "NUMBER2":
-            print(f" in here **** : {abs(BPM - self.gap_beep_rate_0_8)}")
+            #print(f" in here **** : {abs(BPM - self.gap_beep_rate_0_8)}")
             if (abs(BPM - self.gap_beep_rate_0_8) < 8 ): #75 BPM
                 self.number2_count += 1
                 #print(f"number 2 count : {self.number2_count}")

@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 import logging
 import os
 
+from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 import numpy as np
 import numpy.typing as npt
 from scipy import signal
@@ -70,6 +71,9 @@ class SampleProcessor:
         self.i = 0
         SNR = 0.0
         DBFS = 0.0
+        self.valid_intervals = [250, 750, 1250, 1750, 2000, 3000, 3750]
+        self.valid_BPMs = [60 / (interval / 1000) for interval in self.valid_intervals]
+        self.decoder = ChickTimerStatusDecoder()
 
     @property
     def platform_property(self):
@@ -332,10 +336,23 @@ class SampleProcessor:
             longitude = 174.924
         
         #print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
-        self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
+        #self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
         
+        
+
+        normalized_BPMs = min(self.valid_BPMs, key=lambda x:abs(x-BPM)) 
+        self.decoder.send(normalized_BPMs)
+        self.logger.info(f" Normalised BP : {normalized_BPMs} Input BPN : {BPM} current decoder state :{self.decoder.current_state}" )
+
+        if(normalized_BPMs==20):
+            print(self.decoder.ct)
+
+        if (self.decoder.hasValidChickTimer):
+            print(f" This is the new ct : {self.decoder.ct}")
+        
+
         # Send to Finite State Machine
-        self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)
+        #self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)
 
         # increment sample count
         self.beep_slice = False
