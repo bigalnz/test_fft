@@ -578,12 +578,20 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
         samples = samples.astype(np.complex64)
 
     processor = SampleProcessor(process_config)
+
+    # Organize input samples into chunks, resize handles padding the end with zeroes
+    # Better would be to only read single chunks from the file
+    chunk_len = processor.num_samples_to_process
+    n_chunks = np.floor(samples.size/chunk_len).astype(int)
+    samples.resize(n_chunks, chunk_len)
+
     start_time = time.time()
-    for ix in range(0, samples.size, processor.num_samples_to_process ):
-    
-        processor.process(samples[ix:ix+processor.num_samples_to_process])
+
+    for chunk in samples:
+        processor.process(chunk)
+
     finish_time = time.time()
-    print(f" run time is {finish_time-start_time}")
+    print(f" run time is {finish_time-start_time:.2f}")
 
 
 async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
