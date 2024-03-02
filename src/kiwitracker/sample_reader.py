@@ -546,8 +546,37 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
 
 
 def run_from_disk(process_config: ProcessConfig, filename: str):
-    #samples = np.load(filename, allow_pickle=True)
-    samples = np.fromfile(filename)
+    file_extension = os.path.splitext(filename)[1]
+    file_dtype = np.complex64
+
+    match file_extension:
+        case ".fc32":
+            file_dtype = np.complex64
+        case ".sc8":
+            file_dtype = np.uint8
+        case ".s8":
+            file_dtype = np.uint8
+        case ".npy":
+            # read the sample data type from the first sample in the file
+            file_dtype = type(np.load(filename, mmap_mode='r')[0])
+        case _:
+            print(f'Unknown file extension {file_extension}. Rename to one of .fc32, .sc8, or .npy')
+            return
+    
+    print(f'Loading samples from {filename} with data type {file_dtype}')
+    samples = np.fromfile(filename, dtype=np.complex64)
+    print(f'{len(samples)} samples loaded')
+
+    # Convert unsigned 8 bit samples to 32 bit floats and complex
+    if file_dtype == np.uint8:
+        iq = samples.astype(np.float32).view(np.complex64)
+        iq /= 127.5
+        iq -= (1 + 1j)
+        samples = iq.copy()
+    
+    if file_dtype == np.complex128:
+        samples = samples.astype(np.complex64)
+
     processor = SampleProcessor(process_config)
     start_time = time.time()
     for ix in range(0, samples.size, processor.num_samples_to_process ):
