@@ -564,7 +564,7 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
             return
     
     print(f'Loading samples from {filename} with data type {file_dtype}')
-    samples = np.fromfile(filename, dtype=np.complex64)
+    samples = np.fromfile(filename, dtype=file_dtype)
     print(f'{len(samples)} samples loaded')
 
     # Convert unsigned 8 bit samples to 32 bit floats and complex
