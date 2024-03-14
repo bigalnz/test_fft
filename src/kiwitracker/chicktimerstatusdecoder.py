@@ -14,6 +14,7 @@ class ChickTimerStatusDecoder:
         self.background = self._create_background()
         self.tens_digit = self._create_tens_digit()
         self.ones_digit = self._create_ones_digit()
+        self.seperator = self._create_seperator()
         self.current_state = self.background
 
         self.ct = ChickTimer()
@@ -22,12 +23,14 @@ class ChickTimerStatusDecoder:
         self.digitZeroOffset = 2
         self.backgroundCounter = 0
         self.fieldIndex = 0
+        self.seperatorCounter = 0
 
     def send(self, bpm):
+        #print(self.current_state)
         self.current_state.send(bpm)
 
     def getChickTimer(self):
-        return self.ct
+        return ct
     
     def hasValidChickTimerStatus(self):
         return self.hasValidChickTimer
@@ -72,11 +75,28 @@ class ChickTimerStatusDecoder:
                 self.current_state = self.ones_digit
                 self.digitAccumulator += 1
             elif bpm in [16]:
-                self.current_state = self.background
                 self.ct.status.setValue(self.fieldIndex, self.digitAccumulator - self.digitZeroOffset)
                 self.digitAccumulator = 0
                 if self.fieldIndex == 7:
+                    self.current_state = self.background
                     self.hasValidChickTimer = True
                     self.fieldIndex = 0
                 else:
+                    self.current_state = self.seperator
                     self.fieldIndex += 1
+
+    @prime
+    def _create_seperator(self):
+        while True:
+            bpm = yield
+            if bpm in [ 48, 80 ]:
+                if self.seperatorCounter > 5:
+                    self.hasValidChickTimer = False
+                    self.current_state = self.background
+                    self.seperatorCounter = 0
+                else:
+                    self.seperatorCounter += 1
+            if bpm in [20]:
+                self.current_state = self.tens_digit
+                self.seperatorCounter = 0
+                self.digitAccumulator += 1  

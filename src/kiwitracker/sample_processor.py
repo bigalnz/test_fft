@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import asyncio
 from matplotlib import pyplot as plt
+import statistics
 import logging
 import os
 
@@ -44,6 +45,9 @@ class SampleProcessor:
     beep_slice: bool
     rising_edge: int
     falling_edge: int
+    ct_state: bool
+    snrlist: list
+    dbfslist: list
 
     def __init__(self, config: ProcessConfig) -> None:
         self.config = config
@@ -74,6 +78,10 @@ class SampleProcessor:
         self.valid_intervals = [250, 750, 1250, 1750, 2000, 3000, 3750]
         self.valid_BPMs = [60 / (interval / 1000) for interval in self.valid_intervals]
         self.decoder = ChickTimerStatusDecoder()
+
+        self.ct_state = False
+        self.snrlist = []
+        self.dbfslist = []
 
     @property
     def platform_property(self):
@@ -196,7 +204,6 @@ class SampleProcessor:
 
         if (self.freq_offset==0):
             return
-
 
         #record this file in the field - for testing log with IQ values
         #self.f.write(samples.astype(np.complex128))
@@ -325,7 +332,8 @@ class SampleProcessor:
                 #self.beep_slice = False
         else:
             BEEP_DURATION = (falling_edge_idx[0]-rising_edge_idx[0]) / sample_rate
-            
+
+        # GET GPS INFO FROM GPSD    
         if (self.platform_property == "Linux"):
             packet = gpsd.get_current()
             latitude = packet.lat
@@ -338,20 +346,54 @@ class SampleProcessor:
         #print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
         self.logger.info(f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}")
         
-        
-
+        # Send normalized BPMs to ChickTImerStatusDecoder
+        ChickTimerStatus = self.decoder.current_state
         normalized_BPMs = min(self.valid_BPMs, key=lambda x:abs(x-BPM)) 
-        #self.decoder.send(normalized_BPMs)
+        self.decoder.send(normalized_BPMs)
+
+        print(self.decoder.current_state)
+        # Check for CT start by looking at change of state
+        if (ChickTimerStatus is self.decoder.background and self.decoder.current_state is self.decoder.tens_digit):
+            print(" **** CT START *****")
+            self.decoder.ct.start_date_time = datetime.now()
+            self.ct_state = True
         #self.logger.info(f" Normalised BP : {normalized_BPMs} Input BPM : {BPM: 5.2f} current decoder state :{self.decoder.current_state}" )
+
+        
+        if (self.ct_state):
+            self.snrlist.append(SNR)
+            self.dbfslist.append(DBFS)
+
 
         if(normalized_BPMs==20):
             print(self.decoder.ct)
 
-        if (self.decoder.hasValidChickTimer):
-            print(f" This is the new ct : {self.decoder.ct}")
+        # Check for CT end by looking at change of values
+        if (ChickTimerStatus is self.decoder.ones_digit and self.decoder.current_state is self.decoder.background):
+            print(" **** CT FINISH *****")
+            self.decoder.ct.lat =latitude
+            self.decoder.ct.lon = longitude
+            self.decoder.ct.finish_date_time = datetime.now()
+            self.decoder.ct.carrier_freq = self.carrier_freq
+            self.decoder.ct.channel = self.channel
+            print(self.snrlist)
+            print(min(self.snrlist))
+            self.decoder.ct.snr.min = round(min(self.snrlist), 2)
+            self.decoder.ct.snr.max = round(max(self.snrlist), 2)
+            self.decoder.ct.snr.mean = round(statistics.mean(self.snrlist), 2)
+            self.decoder.ct.dbfs.min = round(min(self.dbfslist), 2)
+            self.decoder.ct.dbfs.max = round(max(self.dbfslist), 2)
+            self.decoder.ct.dbfs.mean = round(statistics.mean(self.dbfslist), 2)
+            print(f" This is the new ct : {self.decoder.ct.toJSON()}")
+            #send to db or whatever here
+            # reset everything
+            self.decoder.ct.__init__()
+            self.decoder.ct.status.__init__(0,0,0,0,0,0,0,0)
+            self.dbfslist.clear()
+            self.snrlist.clear()
+            self.ct_state = False
         
-
-        # Send to Finite State Machine
+        # Send to Old Finite State Machine
         #self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)
 
         # increment sample count
