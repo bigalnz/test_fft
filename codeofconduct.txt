@@ -1,0 +1,5 @@
+CODE OF CONDUCT
+
+Be kind to others. Do not insult or put down others. Behave professionally. Remember that harassment and sexist, racist, or exclusionary jokes are not appropriate for this repo.
+
+Swear words, profanity, and unprofessional language is not tolerated. We value empathy, respect and fact based conversations.
