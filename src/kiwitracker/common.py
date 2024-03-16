@@ -33,7 +33,7 @@ class SampleConfig:
 class ProcessConfig:
     sample_config: SampleConfig
 
-    #carrier_freq: float = 160_707_760
+    #carrier_freq: float = 160_708_253
     carrier_freq: float = 160_270_968
     #carrier_freq: float = 160_274_340
 
