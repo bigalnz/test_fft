@@ -509,26 +509,32 @@ def main():
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
     )
+
     process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
 
     if args.infile is not None:
         process_config.running_mode = "disk"
 
-        run_from_disk(
-            process_config=process_config,
-            filename=args.infile,
-        )
-    elif args.outfile is not None:
-        assert args.max_samples is not None
-        asyncio.run(
-            run_readonly(
-                sample_config=sample_config,
-                filename=args.outfile,
-                max_samples=args.max_samples,
-            )
-        )
-    else:
-        asyncio.run(run_main(sample_config=sample_config, process_config=process_config))
+        asyncio.run(run_from_disk_2(process_config=process_config, filename=args.infile))
+
+    # if args.infile is not None:
+    #     process_config.running_mode = "disk"
+
+    #     run_from_disk(
+    #         process_config=process_config,
+    #         filename=args.infile,
+    #     )
+    # elif args.outfile is not None:
+    #     assert args.max_samples is not None
+    #     asyncio.run(
+    #         run_readonly(
+    #             sample_config=sample_config,
+    #             filename=args.outfile,
+    #             max_samples=args.max_samples,
+    #         )
+    #     )
+    # else:
+    #     asyncio.run(run_main(sample_config=sample_config, process_config=process_config))
 
 
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
@@ -563,22 +569,43 @@ def filename_to_dtype(filename):
 
     match file_extension:
         case ".fc32":
-            file_dtype = np.complex64
+            file_dtype = np.dtype(np.complex64)
         case ".sc8":
-            file_dtype = np.uint8
+            file_dtype = np.dtype(np.uint8)
         case ".s8":
-            file_dtype = np.uint8
+            file_dtype = np.dtype(np.uint8)
         case ".npy":
             # read the sample data type from the first sample in the file
-            file_dtype = type(np.load(filename, mmap_mode="r")[0])
+            file_dtype = np.dtype(type(np.load(filename, mmap_mode="r")[0]))
         case _:
             raise ValueError(f"Unknown file extension {file_extension}. Rename to one of .fc32, .sc8, .s8 or .npy")
 
     return file_dtype
 
 
-def run_from_disk(process_config: ProcessConfig, filename: str):
+async def run_from_disk_2(process_config, filename):
+    file_dtype = filename_to_dtype(filename)
 
+    processor = SampleProcessor(process_config)
+
+    samples_queue = asyncio.Queue()
+    sample_processor_task = asyncio.Task(processor.process_2(samples_queue))
+
+    N = 1_000_000
+    current_offset = 0
+    while True:
+        arr = np.fromfile(filename, dtype=file_dtype, count=N, offset=current_offset)
+
+        if len(arr) == 0:
+            break
+
+        await samples_queue.put(arr)
+
+        current_offset += N * file_dtype.itemsize
+        await asyncio.sleep(0.01)
+
+
+def run_from_disk(process_config: ProcessConfig, filename: str):
     file_dtype = filename_to_dtype(filename)
 
     print(f"Loading samples from {filename} with data type {file_dtype}")

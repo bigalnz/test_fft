@@ -1,0 +1,23 @@
+"""
+conftest.py - pytest will automatically detect this file
+and use fixtures defined here in all tests
+"""
+
+import numpy as np
+import pytest
+
+
+@pytest.fixture(scope="session")
+def tmp_npy_file_uint8(tmp_path_factory):
+    arr = np.array([1, 2, 3, 4, 5], dtype=np.uint8)
+    fn = tmp_path_factory.mktemp("data") / "test_uint8.npy"
+    np.save(fn, arr)
+    return fn
+
+
+@pytest.fixture(scope="session")
+def tmp_npy_file_uint32(tmp_path_factory):
+    arr = np.array([1, 2, 3, 4, 5], dtype=np.uint32)
+    fn = tmp_path_factory.mktemp("data") / "test_uint32.npy"
+    np.save(fn, arr)
+    return fn

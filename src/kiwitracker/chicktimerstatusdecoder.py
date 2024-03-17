@@ -1,4 +1,5 @@
-from kiwitracker.chicktimerv2 import ChickTimer, ChickTimerMode, ChickTimerStatus
+from kiwitracker.chicktimerv2 import ChickTimer, ChickTimerMode
+
 
 ## Function Annotation to initialize each coroutine
 def prime(fn):
@@ -6,7 +7,9 @@ def prime(fn):
         v = fn(*args, **kwargs)
         v.send(None)
         return v
+
     return wrapper
+
 
 # Finite State Machine decoder for the Chick Timer main signal
 class ChickTimerStatusDecoder:
@@ -26,18 +29,18 @@ class ChickTimerStatusDecoder:
         self.seperatorCounter = 0
 
     def send(self, bpm):
-        #print(self.current_state)
+        # print(self.current_state)
         self.current_state.send(bpm)
 
     def getChickTimer(self):
         return ct
-    
+
     def hasValidChickTimerStatus(self):
         return self.hasValidChickTimer
-    
+
     def __str__(self):
-        return f'State: {self.current_state}\tField: {self.fieldIndex}\tAccumulator: {self.digitAccumulator}'#\nChickTimer: {ct}'
-    
+        return f"State: {self.current_state}\tField: {self.fieldIndex}\tAccumulator: {self.digitAccumulator}"  # \nChickTimer: {ct}'
+
     @prime
     def _create_background(self):
         while True:
@@ -66,7 +69,7 @@ class ChickTimerStatusDecoder:
                 self.current_state = self.ones_digit
                 self.digitAccumulator = (self.digitAccumulator - self.digitZeroOffset) * 10
                 self.digitAccumulator += 1
-    
+
     @prime
     def _create_ones_digit(self):
         while True:
@@ -89,7 +92,7 @@ class ChickTimerStatusDecoder:
     def _create_seperator(self):
         while True:
             bpm = yield
-            if bpm in [ 48, 80 ]:
+            if bpm in [48, 80]:
                 if self.seperatorCounter > 5:
                     self.hasValidChickTimer = False
                     self.current_state = self.background
@@ -99,4 +102,4 @@ class ChickTimerStatusDecoder:
             if bpm in [20]:
                 self.current_state = self.tens_digit
                 self.seperatorCounter = 0
-                self.digitAccumulator += 1  
+                self.digitAccumulator += 1

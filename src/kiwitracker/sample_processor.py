@@ -158,55 +158,126 @@ class SampleProcessor:
         # this makes sure there's at least 1 full chunk within each beep
         return int(self.beep_duration * self.sample_rate / 2)
 
-    def find_beep_freq(self, samples):
-        # print("find beep freq ran")
-        # look for the presence of a beep within the chunk and :
-        # (1) if beep found calculate the offset
-        # (2) if beep not found iterate the counters and move on
+    # def find_beep_freq(self, samples):
+    #     # print("find beep freq ran")
+    #     # look for the presence of a beep within the chunk and :
+    #     # (1) if beep found calculate the offset
+    #     # (2) if beep not found iterate the counters and move on
 
-        fft_size = self.fft_size
-        f = np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)
-        size = fft_size
-        step = int(size // 1.1)
-        samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
-        num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
-        beep_freqs = []
+    #     fft_size = self.fft_size
+    #     f = np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)
+    #     size = fft_size
+    #     step = int(size // 1.1)
+    #     samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
+    #     num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
+    #     beep_freqs = []
 
-        i = 0
-        for i in range(num_ffts):
-            # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-            fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
+    #     i = 0
+    #     for i in range(num_ffts):
+    #         # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+    #         fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
 
-            # plt.plot(fft)
-            # plt.show()
-            # print(f"{np.max(fft)/np.median(fft)}")
+    #         # plt.plot(fft)
+    #         # plt.show()
+    #         # print(f"{np.max(fft)/np.median(fft)}")
 
-            if (np.max(fft) / np.median(fft)) > 20:
-                # if np.max(fft) > fft_thresh:
-                fft_freqs = np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)
-                # plt.plot(fft_freqs, fft)
+    #         if (np.max(fft) / np.median(fft)) > 20:
+    #             # if np.max(fft) > fft_thresh:
+    #             fft_freqs = np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)
+    #             # plt.plot(fft_freqs, fft)
+    #             # plt.show()
+    #             # print(f"{np.median(fft)}")
+    #             # print(f"{np.max(fft)}")
+    #             beep_freqs.append(np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)[np.argmax(fft)])
+    #             # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
+
+    #     if len(beep_freqs) != 0:
+    #         bp = np.array(beep_freqs)
+    #         bp = bp + self.config.sample_config.center_freq
+    #         bp = bp.astype(np.int64)
+    #         beep_freqs_singular = [
+    #             statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
+    #         ]
+    #         self.logger.info(f"detected beep_freqs offsets is {beep_freqs}")
+    #         self.logger.info(f"detected beep_freqs_singular offsets is {beep_freqs_singular}")
+
+    #         # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
+    #         self.freq_offset = beep_freqs[0]
+    #         self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
+    #         return beep_freqs[0]
+
+    #     return 0
+
+    @staticmethod
+    async def find_beep_freq_2(samples_queue, logger, center_freq, fft_size, sample_rate):
+        while True:
+            # print("find beep freq ran")
+            # look for the presence of a beep within the chunk and :
+            # (1) if beep found calculate the offset
+            # (2) if beep not found iterate the counters and move on
+
+            samples = await samples_queue.get()
+
+            # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+            size = fft_size
+            step = int(size // 1.1)
+            samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
+            num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
+            beep_freqs = []
+
+            i = 0
+            for i in range(num_ffts):
+                # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
+
+                # plt.plot(fft)
                 # plt.show()
-                # print(f"{np.median(fft)}")
-                # print(f"{np.max(fft)}")
-                beep_freqs.append(np.linspace(self.sample_rate / -2, self.sample_rate / 2, fft_size)[np.argmax(fft)])
-                # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
+                # print(f"{np.max(fft)/np.median(fft)}")
 
-        if len(beep_freqs) != 0:
-            bp = np.array(beep_freqs)
-            bp = bp + self.config.sample_config.center_freq
-            bp = bp.astype(np.int64)
-            beep_freqs_singular = [
-                statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
-            ]
-            self.logger.info(f"detected beep_freqs offsets is {beep_freqs}")
-            self.logger.info(f"detected beep_freqs_singular offsets is {beep_freqs_singular}")
+                if (np.max(fft) / np.median(fft)) > 20:
+                    # if np.max(fft) > fft_thresh:
+                    ## fft_freqs = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+                    # plt.plot(fft_freqs, fft)
+                    # plt.show()
+                    # print(f"{np.median(fft)}")
+                    # print(f"{np.max(fft)}")
+                    beep_freqs.append(np.linspace(sample_rate / -2, sample_rate / 2, fft_size)[np.argmax(fft)])
+                    # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
-            # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
-            self.freq_offset = beep_freqs[0]
-            self.config.carrier_freq = beep_freqs[0] + self.config.sample_config.center_freq
-            return beep_freqs[0]
+            if len(beep_freqs) != 0:
+                bp = np.array(beep_freqs)
+                bp = bp + center_freq
+                bp = bp.astype(np.int64)
+                beep_freqs_singular = [
+                    statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
+                ]
+                logger.info(f"detected beep_freqs offsets is {beep_freqs}")
+                logger.info(f"detected beep_freqs_singular offsets is {beep_freqs_singular}")
 
-        return 0
+                # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
+
+                samples_queue.task_done()
+                return beep_freqs[0], beep_freqs[0] + center_freq
+            else:
+                samples_queue.task_done()
+
+    async def process_2(self, samples_queue: asyncio.Queue) -> None:
+
+        # first, find frequency offset (if not set via command line arguments)
+        if self.freq_offset == 0:
+            self.freq_offset, self.config.carrier_freq = await SampleProcessor.find_beep_freq(
+                samples_queue=samples_queue,
+                logger=self.logger,
+                center_freq=self.config.sample_config.center_freq,
+                fft_size=self.fft_size,
+                sample_rate=self.sample_rate,
+            )
+
+        while True:
+            data = await samples_queue.get()
+            print(f"Received sample: {data.size}")
+
+            samples_queue.task_done()
 
     def process(self, samples: SamplesT):
 
