@@ -16,7 +16,6 @@ import numpy.typing as npt
 from matplotlib import pyplot as plt
 from scipy import signal
 
-from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import FloatArray, ProcessConfig, SamplesT
 from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
@@ -67,7 +66,6 @@ class SampleProcessor:
         self.first_half_of_sliced_beep = 0
         self.rising_edge = 0
         self.falling_edge = 0
-        self.bsm = BeepStateMachine(config)
         # self.f = open('testing_file.fc32', 'wb')
         # self.f2 = open('ct_80.fc32', 'wb')
 

@@ -95,5 +95,8 @@ ENV/
 # data
 data/
 
+# temp files
+temp/
+
 # sublime text editor files
 *.sublime-*
