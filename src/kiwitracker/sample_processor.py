@@ -19,7 +19,7 @@ from scipy import signal
 from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import FloatArray, ProcessConfig, SamplesT
-from kiwitracker.fasttelemtrydecoder import FastTelemetryDecoder
+from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 
 if platform.system() == "Linux":
     import gpsd
