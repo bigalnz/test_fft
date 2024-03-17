@@ -63,9 +63,6 @@ class ChickTimer():
       status : ChickTimerStatus
       channel : int
       mode: ChickTimerMode
-      status : ChickTimerStatus
-      channel : int
-      mode: ChickTimerMode
       start_date_time : datetime.date
       finish_date_time : datetime.date
       snr : SignalToNoiseRatio

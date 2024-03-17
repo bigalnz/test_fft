@@ -19,6 +19,7 @@ from scipy import signal
 from kiwitracker.beep_state_machine import BeepStateMachine
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import FloatArray, ProcessConfig, SamplesT
+from kiwitracker.fasttelemtrydecoder import FastTelemetryDecoder
 
 if platform.system() == "Linux":
     import gpsd
@@ -86,6 +87,7 @@ class SampleProcessor:
         self.valid_intervals = [250, 750, 1250, 1750, 2000, 3000, 3750]
         self.valid_BPMs = [60 / (interval / 1000) for interval in self.valid_intervals]
         self.decoder = ChickTimerStatusDecoder()
+        self.fast_telemetry_decoder = FastTelemetryDecoder()
 
         self.ct_state = False
         self.snrlist = []
@@ -363,12 +365,13 @@ class SampleProcessor:
             f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
         )
 
+        self.fast_telemetry_decoder.send(BPM)
+
         # Send normalized BPMs to ChickTImerStatusDecoder
         ChickTimerStatus = self.decoder.current_state
         normalized_BPMs = min(self.valid_BPMs, key=lambda x: abs(x - BPM))
         self.decoder.send(normalized_BPMs)
 
-        print(self.decoder.current_state)
         # Check for CT start by looking at change of state
         if ChickTimerStatus is self.decoder.background and self.decoder.current_state is self.decoder.tens_digit:
             print(" **** CT START *****")
