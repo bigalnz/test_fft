@@ -1,61 +1,62 @@
 from __future__ import annotations
-from typing import Self, TypeAlias, TYPE_CHECKING
+
 import argparse
 import asyncio
 import concurrent.futures
-import numpy as np
-import rtlsdr
 import logging
 import os
 from datetime import datetime
+from typing import TYPE_CHECKING, Self, TypeAlias
+
+import numpy as np
+import rtlsdr
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
 import time
 
-from kiwitracker.common import SamplesT, SampleConfig, ProcessConfig
+from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.sample_processor import SampleProcessor
 
 
 class SampleReader:
     sample_config: SampleConfig
 
-    sdr: RtlSdr|None = None
+    sdr: RtlSdr | None = None
     """RtlSdr instance"""
 
     aio_qsize: int = 100
 
-    def __init__(
-        self,
-        sample_config: SampleConfig,
-        buffer: SampleBuffer|None = None
-    ):
+    def __init__(self, sample_config: SampleConfig, buffer: SampleBuffer | None = None):
         self.sample_config = sample_config
         self._buffer = buffer
         self._running_sync = False
         self._running_async = False
-        self.aio_queue: asyncio.Queue[SamplesT|None] = asyncio.Queue(maxsize=self.aio_qsize)
-        self._read_future: asyncio.Future|None = None
+        self.aio_queue: asyncio.Queue[SamplesT | None] = asyncio.Queue(maxsize=self.aio_qsize)
+        self._read_future: asyncio.Future | None = None
         self._aio_streaming = False
-        self._aio_loop: asyncio.AbstractEventLoop|None = None
+        self._aio_loop: asyncio.AbstractEventLoop | None = None
         self._callback_tasks: set[asyncio.Task] = set()
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
-        self._cleanup_task: asyncio.Task|None = None
-        self.logger = logging.getLogger('KiwiTracker')
+        self._cleanup_task: asyncio.Task | None = None
+        self.logger = logging.getLogger("KiwiTracker")
 
     @property
-    def sample_rate(self): return self.sample_config.sample_rate
+    def sample_rate(self):
+        return self.sample_config.sample_rate
 
     @property
-    def center_freq(self): return self.sample_config.center_freq
+    def center_freq(self):
+        return self.sample_config.center_freq
 
     @property
-    def num_samples(self): return self.sample_config.read_size
+    def num_samples(self):
+        return self.sample_config.read_size
 
     @property
-    def gain(self): return self.sample_config.gain
-
+    def gain(self):
+        return self.sample_config.gain
 
     @property
     def gain_values_db(self) -> list[float]:
@@ -63,26 +64,26 @@ class SampleReader:
         (instead of "tenths of dB")
         """
         if self.sdr is None:
-            raise RuntimeError('SampleReader not open')
+            raise RuntimeError("SampleReader not open")
         return [v / 10 for v in self.sdr.gain_values]
 
     @property
-    def buffer(self) -> SampleBuffer|None:
+    def buffer(self) -> SampleBuffer | None:
         return self._buffer
+
     @buffer.setter
-    def buffer(self, value: SampleBuffer|None):
+    def buffer(self, value: SampleBuffer | None):
         if value is self._buffer:
             return
         if self._aio_streaming:
-            raise RuntimeError('cannot change buffer while streaming')
+            raise RuntimeError("cannot change buffer while streaming")
         self._buffer = value
 
     def read_samples(self) -> SamplesT:
-        """Read :attr:`num_samples` from the device
-        """
+        """Read :attr:`num_samples` from the device"""
         self._ensure_sync()
         if self.sdr is None:
-            raise RuntimeError('SampleReader not open')
+            raise RuntimeError("SampleReader not open")
         samples = self.sdr.read_samples(self.num_samples)
         if TYPE_CHECKING:
             # This is just because `read_samples()`` can return a list
@@ -93,9 +94,9 @@ class SampleReader:
     async def open_stream(self):
         self._ensure_async()
         if self.num_samples % 512 != 0:
-            raise ValueError('num_samples (chunk size) must be a multiple of 512')
+            raise ValueError("num_samples (chunk size) must be a multiple of 512")
         if self.sdr is None:
-            raise RuntimeError('SampleReader not open')
+            raise RuntimeError("SampleReader not open")
         assert self._read_future is None
         loop = asyncio.get_running_loop()
         self._aio_loop = loop
@@ -126,7 +127,7 @@ class SampleReader:
                 await t
             except Exception as exc:
                 print(exc)
-                print('fixme')
+                print("fixme")
         while self.aio_queue.qsize() > 0:
             try:
                 _ = self.aio_queue.get_nowait()
@@ -137,7 +138,6 @@ class SampleReader:
         self._wrap_futures()
         if len(self._wrapped_futures):
             await asyncio.gather(*self._wrapped_futures)
-
 
     def _async_callback(self, samples: SamplesT, *args):
         if not self._aio_streaming:
@@ -151,7 +151,7 @@ class SampleReader:
                 else:
                     await self.buffer.put_nowait(samples)
             except asyncio.QueueFull:
-                print(f'buffer overrun: {q.qsize()=}')
+                print(f"buffer overrun: {q.qsize()=}")
 
         if self._aio_loop is None:
             return
@@ -167,7 +167,7 @@ class SampleReader:
             self._wrapped_futures.add(asyncio.wrap_future(fut))
             self._callback_futures.discard(fut)
 
-    async def _wait_for_futures(self, timeout: float = .01):
+    async def _wait_for_futures(self, timeout: float = 0.01):
         done: set[asyncio.Future]
         done, pending = await asyncio.wait(
             self._wrapped_futures,
@@ -184,20 +184,18 @@ class SampleReader:
             if len(self._wrapped_futures):
                 await self._wait_for_futures()
             if not len(self._wrapped_futures) and not len(self._callback_futures):
-                await asyncio.sleep(.1)
-
+                await asyncio.sleep(0.1)
 
     def _ensure_sync(self):
         if self._running_async:
-            raise RuntimeError('Currently in async mode')
+            raise RuntimeError("Currently in async mode")
 
     def _ensure_async(self):
         if self._running_sync:
-            raise RuntimeError('Currently in sync mode')
+            raise RuntimeError("Currently in sync mode")
 
     def open(self):
-        """Open the device and set all necessary parameters
-        """
+        """Open the device and set all necessary parameters"""
         self._ensure_sync()
         self._running_sync = True
         self._open()
@@ -217,15 +215,22 @@ class SampleReader:
 
         # NOTE: Just for debug purposes. This might help with your gain issue
         self.logger.info(f" RUN TIME START {datetime.now()} \n")
-        self.logger.info(f' ****************************************************************************************************** ')
-        self.logger.info(f' *******          SAMPLING RATE : {sdr.sample_rate}  | CENTER FREQ: {sdr.center_freq}  | GAIN {sdr.gain}                ****** ')
-        self.logger.info(f' ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** ')
-        self.logger.info(f' ****************************************************************************************************** ')
-        print(f'{self.gain_values_db=}')
+        self.logger.info(
+            f" ****************************************************************************************************** "
+        )
+        self.logger.info(
+            f" *******          SAMPLING RATE : {sdr.sample_rate}  | CENTER FREQ: {sdr.center_freq}  | GAIN {sdr.gain}                ****** "
+        )
+        self.logger.info(
+            f" ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** "
+        )
+        self.logger.info(
+            f" ****************************************************************************************************** "
+        )
+        print(f"{self.gain_values_db=}")
 
     def close(self):
-        """Close the device if it's currently open
-        """
+        """Close the device if it's currently open"""
         self._ensure_sync()
         self._close()
         self._running_sync = False
@@ -275,7 +280,7 @@ class SampleReader:
         if not self._aio_streaming:
             raise StopAsyncIteration
         if self.buffer is not None:
-            raise RuntimeError('cannot use async for if SampleBuffer is set')
+            raise RuntimeError("cannot use async for if SampleBuffer is set")
         samples = await self.aio_queue.get()
         self.aio_queue.task_done()
         if samples is None:
@@ -284,9 +289,8 @@ class SampleReader:
 
     def __aiter__(self):
         if self.buffer is not None:
-            raise RuntimeError('cannot use async for if SampleBuffer is set')
+            raise RuntimeError("cannot use async for if SampleBuffer is set")
         return self
-
 
 
 class SampleBuffer:
@@ -308,12 +312,7 @@ class SampleBuffer:
         self._notify_w = asyncio.Condition(self._lock)
         self._notify_r = asyncio.Condition(self._lock)
 
-    async def put(
-        self,
-        samples: SamplesT,
-        block: bool = True,
-        timeout: float|None = None
-    ):
+    async def put(self, samples: SamplesT, block: bool = True, timeout: float | None = None):
         """Append new samples to the end of the buffer, blocking if necessary
 
         If *block* is True and *timeout* is ``None``, block if necessary until
@@ -331,8 +330,10 @@ class SampleBuffer:
 
         async with self._lock:
             sample_size = samples.size
+
             def can_write():
                 return len(self) < self.maxsize - sample_size
+
             if not can_write():
                 if not block:
                     raise asyncio.QueueFull()
@@ -348,16 +349,10 @@ class SampleBuffer:
             self._notify_r.notify_all()
 
     async def put_nowait(self, samples: SamplesT):
-        """Equivalent to ``put(samples, block=False)``
-        """
+        """Equivalent to ``put(samples, block=False)``"""
         await self.put(samples, block=False)
 
-    async def get(
-        self,
-        count: int,
-        block: bool = True,
-        timeout: float|None = None
-    ) -> SamplesT:
+    async def get(self, count: int, block: bool = True, timeout: float | None = None) -> SamplesT:
         """Get *count* number of samples and remove them from the buffer
 
         If *block* is True and *timeout* is ``None``, block if necessary for
@@ -371,6 +366,7 @@ class SampleBuffer:
         Raises:
             QueueEmpty: If a timeout occurs waiting for samples
         """
+
         def has_enough_samples():
             return len(self) >= count
 
@@ -392,8 +388,7 @@ class SampleBuffer:
             return samples
 
     async def get_nowait(self, count: int) -> SamplesT:
-        """Equivalent to ``get(count, block=False)``
-        """
+        """Equivalent to ``get(count, block=False)``"""
         return await self.get(count, block=False)
 
     def qsize(self) -> int:
@@ -411,17 +406,16 @@ class SampleBuffer:
         return self._samples.size
 
 
-
 def main():
 
     # Setup Logging
     # create logger with 'my_application'
-    logger = logging.getLogger('KiwiTracker')
+    logger = logging.getLogger("KiwiTracker")
     logger.setLevel(logging.DEBUG)
 
     # create file handler which logs even debug messages
     print(os.getcwd())
-    fh = logging.FileHandler('kiwitracker.log')
+    fh = logging.FileHandler("kiwitracker.log")
     fh.setLevel(logging.DEBUG)
 
     # create console handler with a higher log level
@@ -429,7 +423,7 @@ def main():
     ch.setLevel(logging.DEBUG)
 
     # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     ch.setFormatter(formatter)
 
@@ -439,68 +433,87 @@ def main():
 
     p = argparse.ArgumentParser()
     p.add_argument(
-        '-f', '--from-file',
-        dest='infile',
-        help='Read samples from the given filename and process them',
+        "-f",
+        "--from-file",
+        dest="infile",
+        help="Read samples from the given filename and process them",
     )
     p.add_argument(
-        '-o', '--outfile',
-        dest='outfile',
-        help='Read samples from the device and save to the given filename',
+        "-o",
+        "--outfile",
+        dest="outfile",
+        help="Read samples from the device and save to the given filename",
     )
     p.add_argument(
-        '-m', '--max-samples',
-        dest='max_samples',
+        "-m",
+        "--max-samples",
+        dest="max_samples",
         type=int,
         help='Number of samples to read when "-o/--outfile" is specified',
     )
 
-    s_group = p.add_argument_group('Sampling')
+    s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
-        '-c', '--chunk-size',
-        dest='chunk_size',
+        "-c",
+        "--chunk-size",
+        dest="chunk_size",
         type=int,
         default=SampleConfig.read_size,
-        help='Chunk size for sdr.read_samples (default: %(default)s)',
+        help="Chunk size for sdr.read_samples (default: %(default)s)",
     )
     s_group.add_argument(
-        '-s', '--sample-rate', dest='sample_rate', type=float,
+        "-s",
+        "--sample-rate",
+        dest="sample_rate",
+        type=float,
         default=SampleConfig.sample_rate,
-        help='SDR sample rate (default: %(default)s)',
+        help="SDR sample rate (default: %(default)s)",
     )
     s_group.add_argument(
-        '--center-freq', dest='center_freq', type=float,
+        "--center-freq",
+        dest="center_freq",
+        type=float,
         default=SampleConfig.center_freq,
-        help='SDR center frequency (default: %(default)s)',
+        help="SDR center frequency (default: %(default)s)",
     )
     s_group.add_argument(
-        '-g', '--gain', dest='gain', type=float,
+        "-g",
+        "--gain",
+        dest="gain",
+        type=float,
         default=SampleConfig.gain,
-        help='SDR gain (default: %(default)s)',
+        help="SDR gain (default: %(default)s)",
     )
     s_group.add_argument(
-        '--bias-tee', dest='bias_tee', action='store_true',
-        help='Enable bias tee',
+        "--bias-tee",
+        dest="bias_tee",
+        action="store_true",
+        help="Enable bias tee",
     )
 
-    p_group = p.add_argument_group('Processing')
+    p_group = p.add_argument_group("Processing")
     p_group.add_argument(
-        '--carrier', dest='carrier', type=float,
+        "--carrier",
+        dest="carrier",
+        type=float,
         default=ProcessConfig.carrier_freq,
-        help='Carrier frequency to process (default: %(default)s)',
+        help="Carrier frequency to process (default: %(default)s)",
     )
 
     args = p.parse_args()
 
     sample_config = SampleConfig(
-        sample_rate=args.sample_rate, center_freq=args.center_freq,
-        gain=args.gain, bias_tee_enable=args.bias_tee, read_size=args.chunk_size,
+        sample_rate=args.sample_rate,
+        center_freq=args.center_freq,
+        gain=args.gain,
+        bias_tee_enable=args.bias_tee,
+        read_size=args.chunk_size,
     )
-    process_config = ProcessConfig(
-        sample_config=sample_config, carrier_freq=args.carrier,
-    )
+    process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
 
     if args.infile is not None:
+        process_config.running_mode = "disk"
+
         run_from_disk(
             process_config=process_config,
             filename=args.infile,
@@ -515,9 +528,8 @@ def main():
             )
         )
     else:
-        asyncio.run(
-            run_main(sample_config=sample_config, process_config=process_config)
-        )
+        asyncio.run(run_main(sample_config=sample_config, process_config=process_config))
+
 
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
     chunk_size = sample_config.read_size
@@ -534,8 +546,8 @@ async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: 
         count = 0
         async for _samples in reader:
             if count == 0:
-                print(f'{_samples.size=}')
-            samples[i,:] = _samples
+                print(f"{_samples.size=}")
+            samples[i, :] = _samples
             count += _samples.size
             # print(f'{i}\t{reader.aio_queue.qsize()=}\t{count=}')
             i += 1
@@ -558,22 +570,22 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
             file_dtype = np.uint8
         case ".npy":
             # read the sample data type from the first sample in the file
-            file_dtype = type(np.load(filename, mmap_mode='r')[0])
+            file_dtype = type(np.load(filename, mmap_mode="r")[0])
         case _:
-            print(f'Unknown file extension {file_extension}. Rename to one of .fc32, .sc8, or .npy')
+            print(f"Unknown file extension {file_extension}. Rename to one of .fc32, .sc8, or .npy")
             return
-    
-    print(f'Loading samples from {filename} with data type {file_dtype}')
+
+    print(f"Loading samples from {filename} with data type {file_dtype}")
     samples = np.fromfile(filename, dtype=file_dtype)
-    print(f'{len(samples)} samples loaded')
+    print(f"{len(samples)} samples loaded")
 
     # Convert unsigned 8 bit samples to 32 bit floats and complex
     if file_dtype == np.uint8:
         iq = samples.astype(np.float32).view(np.complex64)
         iq /= 127.5
-        iq -= (1 + 1j)
+        iq -= 1 + 1j
         samples = iq.copy()
-    
+
     if file_dtype == np.complex128:
         samples = samples.astype(np.complex64)
 
@@ -582,7 +594,7 @@ def run_from_disk(process_config: ProcessConfig, filename: str):
     # Organize input samples into chunks, resize handles padding the end with zeroes
     # Better would be to only read single chunks from the file
     chunk_len = processor.num_samples_to_process
-    n_chunks = np.floor(samples.size/chunk_len).astype(int)
+    n_chunks = np.floor(samples.size / chunk_len).astype(int)
     samples.resize(n_chunks, chunk_len)
 
     start_time = time.time()
@@ -604,11 +616,11 @@ async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
         await reader.open_stream()
         while True:
             samples = await buffer.get(processor.num_samples_to_process)
-            #start_time = time.time()
+            # start_time = time.time()
             await asyncio.to_thread(processor.process, samples)
-            #finish_time = time.time() - start_time
+            # finish_time = time.time() - start_time
             # print(f" prcoessor took : {finish_time}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

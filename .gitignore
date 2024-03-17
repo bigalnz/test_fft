@@ -92,3 +92,8 @@ ENV/
 *.npy
 *.fc32
 
+# data
+data/
+
+# sublime text editor files
+*.sublime-*

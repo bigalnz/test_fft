@@ -73,6 +73,18 @@ git clone git@github.com:bigalnz/test_fft.git
 pip install -e .
 ```
 
+#### Running the tests
+
+```bash
+pip install -e .[test]
+```
+
+and then from the project root:
+
+```bash
+pytest
+```
+
 ## Usage
 
 Once installed, the project can be invoked on the command line:
