@@ -17,7 +17,8 @@ from matplotlib import pyplot as plt
 from scipy import signal
 
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
-from kiwitracker.common import FloatArray, ProcessConfig, SamplesT
+from kiwitracker.common import (FloatArray, ProcessConfig, ProcessResult,
+                                SamplesT)
 from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 
 if platform.system() == "Linux":
@@ -39,7 +40,7 @@ def clipping(high_samples):
 def dBFS(high_samples):
     pwr = np.square(high_samples)
     pwr = np.average(pwr)
-    pwr_dbfs = pwr_dBFS = 10 * np.log10(pwr / 1)
+    pwr_dbfs = 10 * np.log10(pwr / 1)
     return pwr_dbfs
 
 
@@ -261,7 +262,168 @@ class SampleProcessor:
             else:
                 samples_queue.task_done()
 
-    async def process_2(self, samples_queue: asyncio.Queue) -> None:
+    async def process_sample(self, samples_queue, out_queue):
+        while True:
+            samples = await samples_queue.get()
+
+            if samples is None:
+                samples_queue.task_done()
+                break
+
+            # print(f"Received sample: {samples.size}")
+
+            #########################################################################
+            samples = samples * self.phasor[: samples.size]
+            # next two lines are band pass filter?
+            h = self.fir
+            samples = signal.convolve(samples, h, "same")
+            # decimation
+            # recalculation of sample rate due to decimation
+            sample_rate = self.sample_rate / 100
+
+            # record this file in the field - for testing log with IQ values
+            # self.f.write(samples.astype(np.complex128))
+            samples = samples[::100]
+            samples = np.abs(samples)
+            # smoothing
+            samples = signal.convolve(samples, [1] * 10, "same") / 189
+
+            # Get a boolean array for all samples higher or lower than the threshold
+
+            self.threshold = np.median(samples) * 3  # go just above noise floor
+
+            low_samples = samples < self.threshold
+            high_samples = samples >= self.threshold
+
+            # Compute the rising edge and falling edges by comparing the current value to the next with
+            # the boolean operator & (if both are true the result is true) and converting this to an index
+            # into the current array
+            rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+            falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+
+            if len(rising_edge_idx) > 0:
+                # print(f"len rising edges idx {len(rising_edge_idx)}")
+                self.rising_edge = rising_edge_idx[0]
+
+            if len(falling_edge_idx) > 0:
+                self.falling_edge = falling_edge_idx[0]
+
+            # If no rising or falling edges detected - exit early increment counter and move on
+            if len(rising_edge_idx) == 0 and len(falling_edge_idx) == 0:
+                self.stateful_index += samples.size
+
+                samples_queue.task_done()
+                continue
+
+            # If on FIRST rising edge - record edge and increment samples counter then exit early
+            if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
+                # print("*** exit early *** ")
+                self.stateful_rising_edge = rising_edge_idx[0]
+                self.stateful_index += samples.size  # + 9
+
+                samples_queue.task_done()
+                continue
+
+            # Detects if a beep was sliced by end of chunk
+            # Grabs the samples from rising edge of end of samples and passes them to next iteration using samples_between
+            if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+                self.beep_idx = (
+                    rising_edge_idx[0] + self.stateful_index
+                )  # gives you the index of the beep using running total
+                self.beep_slice = True
+                self.distance_to_sample_end = (
+                    len(samples) - rising_edge_idx[0]
+                )  # gives you the distance from the end of samples chunk
+                self.stateful_index += samples.size  # + 14
+                self.first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
+                # print("beep slice condition ln 229 is true - calculating BPM")
+
+                samples_queue.task_done()
+                continue
+
+            # only run these lines if not on a self.beep_slice
+            # not on a beep slice, but missing either a rising or falling edge
+            # is this ever true?
+            if not (self.beep_slice):
+                if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
+                    self.stateful_index += samples.size  # + 9
+
+                    samples_queue.task_done()
+                    continue
+
+                if rising_edge_idx[0] > falling_edge_idx[0]:
+                    falling_edge_idx = falling_edge_idx[1:]
+
+                # Remove stray rising edge at the end
+                if rising_edge_idx[-1] > falling_edge_idx[-1]:
+                    rising_edge_idx = rising_edge_idx[:-1]
+
+            # BPM CALCUATIONS
+            if self.beep_slice:
+                samples_between = (self.stateful_index - self.distance_to_sample_end) - self.stateful_rising_edge
+                time_between = 1 / sample_rate * (samples_between)
+                BPM = 60 / time_between
+                self.stateful_rising_edge = self.stateful_index - self.distance_to_sample_end
+            else:
+                samples_between = (rising_edge_idx[0] + self.stateful_index) - self.stateful_rising_edge
+                self.beep_idx = rising_edge_idx[0] + self.stateful_index
+                time_between = 1 / sample_rate * (samples_between)
+                BPM = 60 / time_between
+                self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
+
+            # GET HIGH AND LOW SAMPLES IN THERE OWN ARRAYS FOR CALC ON SNR, DBFS, CLIPPING
+            if self.beep_slice:
+                high_samples = np.concatenate((self.first_half_of_sliced_beep, samples[: self.falling_edge]))
+                low_samples = samples[self.falling_edge :]
+            else:
+                high_samples = samples[self.rising_edge : self.falling_edge]
+                low_samples = np.concatenate((samples[: self.rising_edge], samples[self.falling_edge :]))
+
+            SNR = snr(high_samples, low_samples)
+            DBFS = dBFS(high_samples)
+            CLIPPING = clipping(high_samples)
+
+            # BEEP DURATION
+            if self.beep_slice:
+                if len(falling_edge_idx) != 0:
+                    BEEP_DURATION = (falling_edge_idx[0] + self.distance_to_sample_end) / sample_rate
+                    # self.beep_slice = False
+                else:
+                    BEEP_DURATION = 0
+                    # print(f"setting beep slice false on ln 273")
+                    # self.beep_slice = False
+            else:
+                BEEP_DURATION = (falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate
+
+            # GET GPS INFO FROM GPSD
+            if self.config.running_mode == "normal":
+                packet = gpsd.get_current()
+                latitude = packet.lat
+                longitude = packet.lon
+            else:
+                # use a default value for now
+                latitude = -36.8807
+                longitude = 174.924
+
+            # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
+            self.logger.info(
+                f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
+            )
+
+            #########################################################################
+
+            res = ProcessResult(datetime.now(), BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
+
+            await out_queue.put(res)
+
+            self.beep_slice = False
+            self.stateful_index += samples.size  # + 14
+            self.rising_edge = 0
+            self.falling_edge = 0
+
+            samples_queue.task_done()
+
+    async def process_2(self, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
 
         # first, find frequency offset (if not set via command line arguments)
         if self.freq_offset == 0:
@@ -273,11 +435,13 @@ class SampleProcessor:
                 sample_rate=self.sample_rate,
             )
 
-        while True:
-            data = await samples_queue.get()
-            print(f"Received sample: {data.size}")
+        await self.process_sample(samples_queue, out_queue)
 
-            samples_queue.task_done()
+        # while True:
+        #     data = await samples_queue.get()
+        #     print(f"Received sample: {data.size}")
+
+        #     samples_queue.task_done()
 
     def process(self, samples: SamplesT):
 

@@ -512,10 +512,22 @@ def main():
 
     process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
 
+    print(sample_config)
+    print(process_config)
+    return
+
     if args.infile is not None:
         process_config.running_mode = "disk"
 
-        asyncio.run(run_from_disk_2(process_config=process_config, filename=args.infile))
+        out_queue = asyncio.Queue()
+
+        asyncio.run(
+            run_from_disk_2(
+                process_config=process_config,
+                filename=args.infile,
+                out_queue=out_queue,
+            )
+        )
 
     # if args.infile is not None:
     #     process_config.running_mode = "disk"
@@ -583,26 +595,61 @@ def filename_to_dtype(filename):
     return file_dtype
 
 
-async def run_from_disk_2(process_config, filename):
+def chunk_numpy_file(filename, dtype, N):
+    current_offset = 0
+    while True:
+        arr = np.fromfile(filename, dtype=dtype, count=N, offset=current_offset)
+
+        if len(arr) == 0:
+            break
+
+        yield arr
+
+        current_offset += N * dtype.itemsize
+
+
+async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
     file_dtype = filename_to_dtype(filename)
 
     processor = SampleProcessor(process_config)
 
     samples_queue = asyncio.Queue()
-    sample_processor_task = asyncio.Task(processor.process_2(samples_queue))
 
-    N = 1_000_000
-    current_offset = 0
-    while True:
-        arr = np.fromfile(filename, dtype=file_dtype, count=N, offset=current_offset)
+    sample_processor_task = asyncio.Task(processor.process_2(samples_queue, out_queue))
 
-        if len(arr) == 0:
+    start_time = time.time()
+
+    N = process_config.num_samples_to_process
+
+    for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
+        await samples_queue.put(chunk)
+
+        if num_chunks is not None and chunks_processed >= num_chunks:
             break
 
-        await samples_queue.put(arr)
+    await samples_queue.put(None)  # Indicate that we are done with samples
+    await samples_queue.join()
 
-        current_offset += N * file_dtype.itemsize
-        await asyncio.sleep(0.01)
+    finish_time = time.time()
+    print(f" run time is {finish_time-start_time:.2f}")
+
+    del sample_processor_task
+
+
+# new from_disk() head:
+# 2024-03-17 22:43:10,575 - KiwiTracker - INFO -  BPM :  186.01 | PWR : -7.89 dBFS | MAG :  0.451 | BEEP_DURATION :  0.1102s | SNR : -14.36 | POS : -36.8807 174.924
+# 2024-03-17 22:43:10,682 - KiwiTracker - INFO -  BPM :  30.00 | PWR : -7.65 dBFS | MAG :  0.452 | BEEP_DURATION :  0.1103s | SNR :  12.01 | POS : -36.8807 174.924
+# 2024-03-17 22:43:10,856 - KiwiTracker - INFO -  BPM :  17.32 | PWR : -8.24 dBFS | MAG :  0.462 | BEEP_DURATION :  0.0896s | SNR :  35.31 | POS : -36.8807 174.924
+# 2024-03-17 22:43:10,943 - KiwiTracker - INFO -  BPM :  30.00 | PWR : -10.62 dBFS | MAG :  0.447 | BEEP_DURATION :  0.0896s | SNR :  37.54 | POS : -36.8807 174.924
+# 2024-03-17 22:43:11,038 - KiwiTracker - INFO -  BPM :  30.33 | PWR : -11.78 dBFS | MAG :  0.288 | BEEP_DURATION :  0.0033s | SNR : -21.53 | POS : -36.8807 174.924
+
+
+# old from_disk() head:
+# 2024-03-17 22:41:50,581 - KiwiTracker - INFO -  BPM :  186.01 | PWR : -7.89 dBFS | MAG :  0.451 | BEEP_DURATION :  0.1102s | SNR : -14.36 | POS : -36.8807 174.924
+# 2024-03-17 22:41:50,680 - KiwiTracker - INFO -  BPM :  30.00 | PWR : -7.65 dBFS | MAG :  0.452 | BEEP_DURATION :  0.1103s | SNR :  12.01 | POS : -36.8807 174.924
+# 2024-03-17 22:41:50,877 - KiwiTracker - INFO -  BPM :  17.32 | PWR : -8.24 dBFS | MAG :  0.462 | BEEP_DURATION :  0.0896s | SNR :  35.31 | POS : -36.8807 174.924
+# 2024-03-17 22:41:50,994 - KiwiTracker - INFO -  BPM :  30.00 | PWR : -10.62 dBFS | MAG :  0.447 | BEEP_DURATION :  0.0896s | SNR :  37.54 | POS : -36.8807 174.924
+# 2024-03-17 22:41:51,101 - KiwiTracker - INFO -  BPM :  30.33 | PWR : -11.78 dBFS | MAG :  0.288 | BEEP_DURATION :  0.0033s | SNR : -21.53 | POS : -36.8807 174.924
 
 
 def run_from_disk(process_config: ProcessConfig, filename: str):

@@ -1,3 +1,4 @@
+import datetime
 from dataclasses import dataclass
 
 import numpy as np
@@ -48,3 +49,19 @@ class ProcessConfig:
         "normal" - read from radio
         "disk" - data are from disk
     """
+
+
+@dataclass
+class ProcessResult:
+    """
+    One result from the sample processor
+    """
+
+    date: datetime.datetime
+    BPM: float
+    DBFS: float
+    CLIPPING: float
+    BEEP_DURATION: float
+    SNR: float
+    latitude: float
+    longitude: float
