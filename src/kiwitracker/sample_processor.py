@@ -7,7 +7,7 @@ import logging
 import os
 
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
-from kiwitracker.fasttelemtrydecoder import FastTelemetryDecoder
+from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 import numpy as np
 import numpy.typing as npt
 from scipy import signal
@@ -237,7 +237,7 @@ class SampleProcessor:
         samples = samples[::100]
         samples = np.abs(samples)
         # smoothing
-        samples = signal.convolve(samples, [1]*10, 'same')/189
+        samples = signal.convolve(samples, [1]*189, 'same')/189
        
         #for testing - log to file
         #self.f.write(samples.astype(np.float32).tobytes())
