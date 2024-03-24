@@ -1,4 +1,5 @@
 import datetime
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -52,14 +53,23 @@ class ProcessConfig:
         "disk" - data are from disk
     """
 
-    # shortcuts to sample_config:
     @property
-    def sample_rate(self):
+    def sample_rate(self) -> float:
         return self.sample_config.sample_rate
 
     @property
-    def freq_offset(self):
+    def freq_offset(self) -> float:
         return self.sample_config.center_freq - self.carrier_freq
+
+    @property
+    def channel(self) -> int:
+        """Channel Number from Freq"""
+        return math.floor((self.carrier_freq - 160.11e6) / 0.01e6)
+
+    @property
+    def fft_size(self, beep_duration=0.017) -> int:
+        # this makes sure there's at least 1 full chunk within each beep
+        return int(beep_duration * self.sample_rate / 2)
 
 
 @dataclass

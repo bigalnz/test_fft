@@ -63,8 +63,6 @@ def dBFS(high_samples):
 
 class SampleProcessor:
     config: ProcessConfig
-    threshold: float = 0.2
-    beep_duration: float = 0.017  # seconds
     ct_state: bool
     snrlist: list
     dbfslist: list
@@ -94,22 +92,8 @@ class SampleProcessor:
         self.snrlist = []
         self.dbfslist = []
 
-    @property
-    def platform_property(self):
-        return platform.system()
-
-    @property
-    def channel(self):
-        """Channel Number from Freq"""
-        return math.floor((self.config.carrier_freq - 160.11e6) / 0.01e6)
-
-    @property
-    def fft_size(self) -> int:
-        # this makes sure there's at least 1 full chunk within each beep
-        return int(self.beep_duration * self.sample_rate / 2)
-
     @staticmethod
-    async def find_beep_freq_2(samples_queue, logger, center_freq, fft_size, sample_rate):
+    async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig):
         while True:
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
@@ -119,7 +103,7 @@ class SampleProcessor:
             samples = await samples_queue.get()
 
             # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
-            size = fft_size
+            size = pc.fft_size
             step = int(size // 1.1)
             samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
             num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
@@ -128,7 +112,7 @@ class SampleProcessor:
             i = 0
             for i in range(num_ffts):
                 # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / fft_size
+                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / pc.fft_size
 
                 # plt.plot(fft)
                 # plt.show()
@@ -141,12 +125,12 @@ class SampleProcessor:
                     # plt.show()
                     # print(f"{np.median(fft)}")
                     # print(f"{np.max(fft)}")
-                    beep_freqs.append(np.linspace(sample_rate / -2, sample_rate / 2, fft_size)[np.argmax(fft)])
+                    beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
                     # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
             if len(beep_freqs) != 0:
                 bp = np.array(beep_freqs)
-                bp = bp + center_freq
+                bp = bp + pc.center_freq
                 bp = bp.astype(np.int64)
                 beep_freqs_singular = [
                     statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
@@ -158,7 +142,7 @@ class SampleProcessor:
 
                 samples_queue.task_done()
                 # return beep_freqs[0], beep_freqs[0] + center_freq
-                return beep_freqs[0] + center_freq
+                return beep_freqs[0] + pc.center_freq
             else:
                 samples_queue.task_done()
 
@@ -339,11 +323,7 @@ class SampleProcessor:
         # first, find frequency offset (if not set via command line arguments)
         if pc.freq_offset == 0:
             pc.carrier_freq = await SampleProcessor.find_beep_freq_2(
-                samples_queue=samples_queue,
-                logger=self.logger,
-                center_freq=pc.sample_config.center_freq,
-                fft_size=self.fft_size,
-                sample_rate=pc.sample_config.sample_rate,
+                samples_queue=samples_queue, logger=self.logger, pc=pc
             )
 
         await self.process_sample(pc, samples_queue, out_queue)
