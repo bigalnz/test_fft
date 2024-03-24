@@ -615,7 +615,7 @@ async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
 
     samples_queue = asyncio.Queue()
 
-    sample_processor_task = asyncio.Task(processor.process_2(samples_queue, out_queue))
+    sample_processor_task = asyncio.Task(processor.process_2(process_config, samples_queue, out_queue))
 
     start_time = time.time()
 

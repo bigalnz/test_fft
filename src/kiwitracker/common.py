@@ -9,8 +9,10 @@ SamplesT = npt.NDArray[np.complex128]
 
 FloatArray = npt.NDArray[np.float64]
 
+# frozen=True -> makes dataclass hashable
 
-@dataclass
+
+@dataclass(frozen=True)
 class SampleConfig:
     sample_rate: float = 1.024e6
     """Sample rate"""
@@ -31,7 +33,7 @@ class SampleConfig:
     """Set population location"""
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProcessConfig:
     sample_config: SampleConfig
 
@@ -49,6 +51,15 @@ class ProcessConfig:
         "normal" - read from radio
         "disk" - data are from disk
     """
+
+    # shortcuts to sample_config:
+    @property
+    def sample_rate(self):
+        return self.sample_config.sample_rate
+
+    @property
+    def freq_offset(self):
+        return self.sample_config.center_freq - self.carrier_freq
 
 
 @dataclass
