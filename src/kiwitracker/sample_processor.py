@@ -24,6 +24,13 @@ from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 if platform.system() == "Linux":
     import gpsd
 
+from functools import cache
+
+
+@cache
+def fir():
+    return signal.firwin(501, 0.02, pass_zero=True)
+
 
 def snr(high_samples, low_samples):
     noise_pwr = np.var(low_samples)
@@ -60,7 +67,7 @@ class SampleProcessor:
         self.config = config
         # self.stateful_index = 0
         self._time_array = None
-        self._fir = None
+        # self._fir = None
         self._phasor = None
         # self.stateful_rising_edge = 0
         # self.beep_slice = False
@@ -132,27 +139,22 @@ class SampleProcessor:
 
     @property
     def time_array(self) -> FloatArray:
-        t = self._time_array
-        if t is None:
-            t = np.arange(self.num_samples_to_process) / self.sample_rate
-            self._time_array = t
-        return t
+        if self._time_array is None:
+            self._time_array = np.arange(self.num_samples_to_process) / self.sample_rate
+        return self._time_array
 
-    @property
-    def fir(self) -> FloatArray:
-        h = self._fir
-        if h is None:
-            h = self._fir = signal.firwin(501, 0.02, pass_zero=True)
-        return h
+    # @property
+    # def fir(self) -> FloatArray:
+    #     if self._fir is None:
+    #         self._fir = signal.firwin(501, 0.02, pass_zero=True)
+    #     return self._fir
 
     @property
     def phasor(self) -> npt.NDArray[np.complex128]:
-        p = self._phasor
-        if p is None:
+        if self._phasor is None:
             t = self.time_array
-            p = np.exp(2j * np.pi * t * self.freq_offset)
-            self._phasor = p
-        return p
+            self._phasor = np.exp(2j * np.pi * t * self.freq_offset)
+        return self._phasor
 
     @property
     def fft_size(self) -> int:
@@ -285,7 +287,7 @@ class SampleProcessor:
             #########################################################################
             samples = samples * self.phasor[: samples.size]
             # next two lines are band pass filter?
-            samples = signal.convolve(samples, self.fir, "same")
+            samples = signal.convolve(samples, fir(), "same")
             # decimation
             # recalculation of sample rate due to decimation
             sample_rate = self.sample_rate / 100
