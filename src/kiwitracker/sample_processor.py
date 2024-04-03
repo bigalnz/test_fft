@@ -33,13 +33,13 @@ def fir() -> np.ndarray:
 
 
 @lru_cache(maxsize=5)
-def time_array(pc: ProcessConfig) -> np.ndarray:
-    return np.arange(pc.num_samples_to_process) / pc.sample_rate
+def time_array(num_samples_to_process, sample_rate) -> np.ndarray:
+    return np.arange(num_samples_to_process) / sample_rate
 
 
 @lru_cache(maxsize=5)
-def phasor(pc: ProcessConfig) -> np.ndarray:
-    return np.exp(2j * np.pi * time_array(pc) * pc.freq_offset)
+def phasor(num_samples_to_process, sample_rate, freq_offset) -> np.ndarray:
+    return np.exp(2j * np.pi * time_array(num_samples_to_process, sample_rate) * freq_offset)
 
 
 def snr(high_samples, low_samples):
@@ -149,7 +149,7 @@ class SampleProcessor:
     @staticmethod
     def decimate_samples(samples, pc: ProcessConfig):
         #########################################################################
-        samples = samples * phasor(pc)[: samples.size]
+        samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
         # next two lines are band pass filter?
         samples = signal.convolve(samples, fir(), "same")
         # decimation
@@ -162,6 +162,40 @@ class SampleProcessor:
         # smoothing
         samples = signal.convolve(samples, [1] * 10, "same") / 189
         return samples, pc.sample_rate / 100
+
+    @staticmethod
+    def get_rising_falling_indices(samples):
+        # Get a boolean array for all samples higher or lower than the threshold
+        threshold = np.median(samples) * 3  # go just above noise floor
+
+        low_samples = samples < threshold
+        high_samples = samples >= threshold
+
+        # Compute the rising edge and falling edges by comparing the current value to the next with
+        # the boolean operator & (if both are true the result is true) and converting this to an index
+        # into the current array
+        rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+        falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+
+        return rising_edge_idx, falling_edge_idx
+
+    @staticmethod
+    def detect_beep_coro(pc):
+        samples, sample_rate = yield
+
+        while True:
+            rising_edge_idx, falling_edge_idx = SampleProcessor.get_rising_falling_indices(samples)
+
+            # not rising, nor falling, return None and wait for other sample
+            if not rising_edge_idx and not falling_edge_idx:
+                samples, sample_rate = yield None
+            # are we in sliced beep?
+            elif len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+                rising_idx = rising_edge_idx[0]
+                first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
+                # yes, so return None and wait for falling
+                while True:
+                    samples, sample_rate = yield None
 
     async def process_sample(self, pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
         rising_edge = 0
@@ -182,21 +216,13 @@ class SampleProcessor:
                 break
 
             # print(f"Received sample: {samples.size}")
-
             samples, sample_rate = self.decimate_samples(samples, pc)
 
-            # Get a boolean array for all samples higher or lower than the threshold
+            # ... = dbc.send(samples, sample_rate)
 
-            threshold = np.median(samples) * 3  # go just above noise floor
+            rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
 
-            low_samples = samples < threshold
-            high_samples = samples >= threshold
-
-            # Compute the rising edge and falling edges by comparing the current value to the next with
-            # the boolean operator & (if both are true the result is true) and converting this to an index
-            # into the current array
-            rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-            falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+            print(rising_edge_idx, falling_edge_idx, beep_slice)
 
             if len(rising_edge_idx) > 0:
                 # print(f"len rising edges idx {len(rising_edge_idx)}")
@@ -300,6 +326,8 @@ class SampleProcessor:
                 latitude = -36.8807
                 longitude = 174.924
 
+            print(f"{rising_edge=} {falling_edge=}")
+
             # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
             self.logger.info(
                 f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
@@ -308,6 +336,7 @@ class SampleProcessor:
             #########################################################################
 
             res = ProcessResult(datetime.now(), BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
+            print(res)
 
             await out_queue.put(res)
 

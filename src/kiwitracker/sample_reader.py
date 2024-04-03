@@ -512,9 +512,9 @@ def main():
 
     process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
 
-    print(sample_config)
-    print(process_config)
-    return
+    #print(sample_config)
+    #print(process_config)
+    #return
 
     if args.infile is not None:
         process_config.running_mode = "disk"

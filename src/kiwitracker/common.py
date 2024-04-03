@@ -13,7 +13,7 @@ FloatArray = npt.NDArray[np.float64]
 # frozen=True -> makes dataclass hashable
 
 
-@dataclass(frozen=True)
+@dataclass
 class SampleConfig:
     sample_rate: float = 1.024e6
     """Sample rate"""
@@ -34,7 +34,7 @@ class SampleConfig:
     """Set population location"""
 
 
-@dataclass(frozen=True)
+@dataclass
 class ProcessConfig:
     sample_config: SampleConfig
 
