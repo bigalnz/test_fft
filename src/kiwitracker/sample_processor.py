@@ -160,7 +160,7 @@ class SampleProcessor:
         # self.f.write(samples.astype(np.complex128))
         samples = np.abs(samples[::100])
         # smoothing
-        samples = signal.convolve(samples, [1] * 10, "same") / 189
+        samples = signal.convolve(samples, [1] * 189, "same") / 189
         return samples, pc.sample_rate / 100
 
     @staticmethod
@@ -208,6 +208,8 @@ class SampleProcessor:
         distance_to_sample_end = None
         first_half_of_sliced_beep = 0
 
+        print()
+
         while True:
             samples = await samples_queue.get()
 
@@ -222,6 +224,7 @@ class SampleProcessor:
 
             rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
 
+            # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
             print(rising_edge_idx, falling_edge_idx, beep_slice)
 
             if len(rising_edge_idx) > 0:
@@ -239,13 +242,13 @@ class SampleProcessor:
                 continue
 
             # If on FIRST rising edge - record edge and increment samples counter then exit early
-            if len(rising_edge_idx) == 1 and stateful_rising_edge == 0:
-                # print("*** exit early *** ")
-                stateful_rising_edge = rising_edge_idx[0]
-                stateful_index += samples.size  # + 9
+            # if len(rising_edge_idx) == 1 and stateful_rising_edge == 0:
+            #     # print("*** exit early *** ")
+            #     stateful_rising_edge = rising_edge_idx[0]
+            #     stateful_index += samples.size  # + 9
 
-                samples_queue.task_done()
-                continue
+            #     samples_queue.task_done()
+            #     continue
 
             # Detects if a beep was sliced by end of chunk
             # Grabs the samples from rising edge of end of samples and passes them to next iteration using samples_between

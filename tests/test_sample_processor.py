@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from kiwitracker.common import ProcessConfig, SampleConfig
 from kiwitracker.sample_reader import chunk_numpy_file, run_from_disk_2
 
 
@@ -39,3 +40,31 @@ async def test_process_sample(request, process_config):
 
     assert np.allclose(bpms, bpms_expected)
     assert np.allclose(beep_durations, beep_durations_expected)
+
+
+@pytest.mark.asyncio
+async def test_multiple_4_s8(request):
+    p = Path(request.config.rootpath) / "data" / "test_multiple_4.s8"
+
+    sc = SampleConfig(sample_rate=1_024_000, center_freq=160_500_000, gain=25.4)
+    pc = ProcessConfig(sample_config=sc, carrier_freq=160_601_310, running_mode="disk")
+
+    out_queue = asyncio.Queue()
+    await run_from_disk_2(pc, p, out_queue)
+
+    data = []
+    while not out_queue.empty():
+        data.append(await out_queue.get())
+        out_queue.task_done()
+
+    bpms = [r.BPM for r in data]
+    beep_durations = [r.BEEP_DURATION for r in data]
+
+    bpms_expected = np.array([0.13997102162442931, 13.539600687557847, 1.491215083019225], dtype=np.float64)
+    beep_durations_expected = np.array([0.00166015625, 0.00234375, 0.00048828125], dtype=np.float64)
+
+    print(bpms)
+    print(beep_durations)
+
+    # assert np.allclose(bpms, bpms_expected)
+    # assert np.allclose(beep_durations, beep_durations_expected)
