@@ -95,6 +95,7 @@ class SampleProcessor:
     @staticmethod
     async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig):
         while True:
+            print("here")
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
             # (1) if beep found calculate the offset
@@ -120,7 +121,8 @@ class SampleProcessor:
 
                 if (np.max(fft) / np.median(fft)) > 20:
                     # if np.max(fft) > fft_thresh:
-                    ## fft_freqs = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+                    fft_freqs = np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)
+                    fft_freqs = fft_freqs + pc.sample_config.center_freq
                     # plt.plot(fft_freqs, fft)
                     # plt.show()
                     # print(f"{np.median(fft)}")
@@ -130,7 +132,7 @@ class SampleProcessor:
 
             if len(beep_freqs) != 0:
                 bp = np.array(beep_freqs)
-                bp = bp + pc.center_freq
+                bp = bp + pc.sample_config.center_freq
                 bp = bp.astype(np.int64)
                 beep_freqs_singular = [
                     statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
@@ -142,7 +144,7 @@ class SampleProcessor:
 
                 samples_queue.task_done()
                 # return beep_freqs[0], beep_freqs[0] + center_freq
-                return beep_freqs[0] + pc.center_freq
+                return beep_freqs[0] + pc.sample_config.center_freq
             else:
                 samples_queue.task_done()
 
@@ -166,7 +168,7 @@ class SampleProcessor:
     @staticmethod
     def get_rising_falling_indices(samples):
         # Get a boolean array for all samples higher or lower than the threshold
-        threshold = np.median(samples) * 3  # go just above noise floor
+        threshold = np.median(samples) * 2  # go just above noise floor
 
         low_samples = samples < threshold
         high_samples = samples >= threshold
@@ -353,6 +355,7 @@ class SampleProcessor:
     async def process_2(self, pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
 
         # first, find frequency offset (if not set via command line arguments)
+        # Add logic - If --scan is passed then send the first 3 seconds of samples to be scanned
         if pc.freq_offset == 0:
             pc.carrier_freq = await SampleProcessor.find_beep_freq_2(
                 samples_queue=samples_queue, logger=self.logger, pc=pc
