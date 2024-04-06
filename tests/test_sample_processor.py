@@ -49,8 +49,6 @@ async def test_multiple_4_s8(request):
     sc = SampleConfig(sample_rate=1_024_000, center_freq=160_500_000, gain=14.4)
     pc = ProcessConfig(sample_config=sc, carrier_freq=160_708_082, running_mode="disk")
 
-    # ProcessConfig(sample_config=SampleConfig(sample_rate=1024000.0, center_freq=160500000.0, read_size=65536, gain=14.4, bias_tee_enable=False, location='Ponui'), carrier_freq=160708082.0, num_samples_to_process=250000)
-
     out_queue = asyncio.Queue()
     await run_from_disk_2(pc, p, out_queue)
 

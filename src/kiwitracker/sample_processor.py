@@ -225,7 +225,7 @@ class SampleProcessor:
             rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
 
             # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
-            print(rising_edge_idx, falling_edge_idx, beep_slice, samples, sample_rate)
+            print(rising_edge_idx, falling_edge_idx, beep_slice)
 
             if len(rising_edge_idx) > 0:
                 # print(f"len rising edges idx {len(rising_edge_idx)}")
