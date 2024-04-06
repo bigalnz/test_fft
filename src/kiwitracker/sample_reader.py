@@ -451,6 +451,12 @@ def main():
         type=int,
         help='Number of samples to read when "-o/--outfile" is specified',
     )
+    p.add_argument(
+        '--scan',
+        dest='scan',
+        action='store_true',
+        help='Scan for frequencies in first 3sec',
+    )
 
     s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
@@ -599,6 +605,16 @@ def chunk_numpy_file(filename, dtype, N):
     current_offset = 0
     while True:
         arr = np.fromfile(filename, dtype=dtype, count=N, offset=current_offset)
+
+        # Convert unsigned 8 bit samples to 32 bit floats and complex
+        if dtype == 'uint8':
+            iq = arr.astype(np.float32).view(np.complex64)
+            iq /= 127.5
+            iq -= 1 + 1j
+            arr = iq.copy()
+
+        if dtype == np.complex128:
+            arr = arr.astype(np.complex64)
 
         if len(arr) == 0:
             break
