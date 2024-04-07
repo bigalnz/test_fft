@@ -101,6 +101,11 @@ class SampleProcessor:
             # (1) if beep found calculate the offset
             # (2) if beep not found iterate the counters and move on
 
+            # TO DO
+            # This function only to be called when --scan is given on command line
+            # This function needs to operated on the first 12 chunks (3 seconds) of data
+            # The detected beep array should reject any value not between 160110000 and 161120000
+
             samples = await samples_queue.get()
 
             # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
@@ -163,8 +168,8 @@ class SampleProcessor:
         samples = np.abs(samples[::100])
         unfiltered = samples
         # smoothing
-        #samples = signal.convolve(samples, [1] * 189, "valid") / 189
-        samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189 
+        # samples = signal.convolve(samples, [1] * 189, "valid") / 189
+        samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
         return samples, pc.sample_rate / 100
 
     @staticmethod
@@ -210,7 +215,7 @@ class SampleProcessor:
         # beep_idx = 0
         chunk_count = 0
         tot_samp_count = 0
-        previous_samples = [0]*188
+        previous_samples = [0] * 188
 
         distance_to_sample_end = None
         first_half_of_sliced_beep = 0
@@ -220,12 +225,13 @@ class SampleProcessor:
         while True:
             samples = await samples_queue.get()
 
-            chunk_count += 1
-            tot_samp_count = tot_samp_count + len(samples)
-
+            # do we need to quit? E.g. we processed all chunks from test file
             if samples is None:
                 samples_queue.task_done()
                 break
+
+            chunk_count += 1
+            tot_samp_count = tot_samp_count + len(samples)
 
             # print(f"Received sample: {samples.size}")
             samples, sample_rate = self.decimate_samples(samples, previous_samples, pc)
@@ -235,11 +241,10 @@ class SampleProcessor:
 
             rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
 
-
-            if (len(rising_edge_idx)==0 and len(falling_edge_idx==1)) or chunk_count in (39, 40, 41):
+            if (len(rising_edge_idx) == 0 and len(falling_edge_idx == 1)) or chunk_count in (39, 40, 41):
                 print(chunk_count)
-                #plt.plot(samples)
-                #plt.show()
+                # plt.plot(samples)
+                # plt.show()
 
             # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
             print(rising_edge_idx, falling_edge_idx, beep_slice)
