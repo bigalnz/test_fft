@@ -591,7 +591,7 @@ def filename_to_dtype(filename):
         case ".sc8":
             file_dtype = np.dtype(np.uint8)
         case ".s8":
-            file_dtype = np.dtype(np.uint8)
+            file_dtype = np.dtype(np.int8)
         case ".npy":
             # read the sample data type from the first sample in the file
             file_dtype = np.dtype(type(np.load(filename, mmap_mode="r")[0]))
@@ -607,7 +607,7 @@ def chunk_numpy_file(filename, dtype, N):
         arr = np.fromfile(filename, dtype=dtype, count=N, offset=current_offset)
 
         # Convert unsigned 8 bit samples to 32 bit floats and complex
-        if dtype == 'uint8':
+        if dtype == 'int8':
             iq = arr.astype(np.float32).view(np.complex64)
             iq /= 127.5
             iq -= 1 + 1j

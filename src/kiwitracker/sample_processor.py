@@ -149,7 +149,7 @@ class SampleProcessor:
                 samples_queue.task_done()
 
     @staticmethod
-    def decimate_samples(samples, pc: ProcessConfig):
+    def decimate_samples(samples, previous_samples, pc: ProcessConfig):
         #########################################################################
         samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
         # next two lines are band pass filter?
@@ -161,14 +161,16 @@ class SampleProcessor:
         # record this file in the field - for testing log with IQ values
         # self.f.write(samples.astype(np.complex128))
         samples = np.abs(samples[::100])
+        unfiltered = samples
         # smoothing
-        samples = signal.convolve(samples, [1] * 189, "same") / 189
+        #samples = signal.convolve(samples, [1] * 189, "valid") / 189
+        samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189 
         return samples, pc.sample_rate / 100
 
     @staticmethod
     def get_rising_falling_indices(samples):
         # Get a boolean array for all samples higher or lower than the threshold
-        threshold = np.median(samples) * 2  # go just above noise floor
+        threshold = np.median(samples) * 1.8  # go just above noise floor
 
         low_samples = samples < threshold
         high_samples = samples >= threshold
@@ -206,6 +208,9 @@ class SampleProcessor:
         stateful_rising_edge = 0
         beep_slice = False
         # beep_idx = 0
+        chunk_count = 0
+        tot_samp_count = 0
+        previous_samples = [0]*188
 
         distance_to_sample_end = None
         first_half_of_sliced_beep = 0
@@ -215,16 +220,26 @@ class SampleProcessor:
         while True:
             samples = await samples_queue.get()
 
+            chunk_count += 1
+            tot_samp_count = tot_samp_count + len(samples)
+
             if samples is None:
                 samples_queue.task_done()
                 break
 
             # print(f"Received sample: {samples.size}")
-            samples, sample_rate = self.decimate_samples(samples, pc)
+            samples, sample_rate = self.decimate_samples(samples, previous_samples, pc)
+            previous_samples = samples
 
             # ... = dbc.send(samples, sample_rate)
 
             rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
+
+
+            if (len(rising_edge_idx)==0 and len(falling_edge_idx==1)) or chunk_count in (39, 40, 41):
+                print(chunk_count)
+                #plt.plot(samples)
+                #plt.show()
 
             # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
             print(rising_edge_idx, falling_edge_idx, beep_slice)
