@@ -101,6 +101,11 @@ class SampleProcessor:
             # (1) if beep found calculate the offset
             # (2) if beep not found iterate the counters and move on
 
+            # TO DO
+            # This function only to be called when --scan is given on command line
+            # This function needs to operated on the first 12 chunks (3 seconds) of data
+            # The detected beep array should reject any value not between 160110000 and 161120000
+
             samples = await samples_queue.get()
 
             # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
