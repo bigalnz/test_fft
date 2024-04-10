@@ -13,7 +13,7 @@ async def test_process_sample(request, process_config):
     p = Path(request.config.rootpath) / "data" / "rtl_ct.s8"
 
     # assert chunk_numpy_file() works correctly
-    num_chunks = sum(1 for _ in chunk_numpy_file(p, np.dtype("uint8"), 250_000))
+    num_chunks = sum(1 for _ in chunk_numpy_file(p, np.dtype("int8"), 250_000))
     assert num_chunks == 1967
 
     # assert process_sample() works correctly
@@ -31,11 +31,29 @@ async def test_process_sample(request, process_config):
     beep_durations = [r.BEEP_DURATION for r in data]
 
     bpms_expected = np.array(
-        [186.01271571298818, 30.0, 17.316798196166854, 29.998535227772084, 30.32875900878665], dtype=np.float64
+        [
+            100.75434568711051,
+            79.20587856129947,
+            76.72327672327671,
+            80.13564627624885,
+            74.08657904256602,
+            69.89761092150171,
+            78.66837387964148,
+        ],
+        dtype=np.float64,
     )
 
     beep_durations_expected = np.array(
-        [0.11015625, 0.11025390625, 0.0896484375, 0.08955078125, 0.0033203125], dtype=np.float64
+        [
+            0.01220703125,
+            0.013780381944444444,
+            0.012532552083333334,
+            0.014105902777777778,
+            0.013780381944444444,
+            0.014865451388888888,
+            0.012749565972222222,
+        ],
+        dtype=np.float64,
     )
 
     assert np.allclose(bpms, bpms_expected)
@@ -60,11 +78,42 @@ async def test_multiple_4_s8(request):
     bpms = [r.BPM for r in data]
     beep_durations = [r.BEEP_DURATION for r in data]
 
-    bpms_expected = np.array([0.13997102162442931, 13.539600687557847, 1.491215083019225], dtype=np.float64)
-    beep_durations_expected = np.array([0.00166015625, 0.00234375, 0.00048828125], dtype=np.float64)
+    bpms_expected = np.array(
+        [
+            153.29341317365268,
+            79.9791720906014,
+            79.9791720906014,
+            79.9791720906014,
+            80.07298318780137,
+            79.9791720906014,
+            79.95835502342528,
+            80.0104180231801,
+            80.05211726384364,
+            79.93754879000781,
+            79.94795055302538,
+            80.07298318780137,
+            79.98958468949355,
+        ],
+        dtype=np.float64,
+    )
+    beep_durations_expected = np.array(
+        [
+            0.012369791666666666,
+            0.012152777777777776,
+            0.011881510416666666,
+            0.01171875,
+            0.012586805555555554,
+            0.012261284722222222,
+            0.011881510416666666,
+            0.012098524305555556,
+            0.012586805555555554,
+            0.011990017361111112,
+            0.01144748263888889,
+            0.012152777777777776,
+            0.012152777777777776,
+        ],
+        dtype=np.float64,
+    )
 
-    print(bpms)
-    print(beep_durations)
-
-    # assert np.allclose(bpms, bpms_expected)
-    # assert np.allclose(beep_durations, beep_durations_expected)
+    assert np.allclose(bpms, bpms_expected)
+    assert np.allclose(beep_durations, beep_durations_expected)

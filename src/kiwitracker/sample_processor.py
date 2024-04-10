@@ -95,7 +95,6 @@ class SampleProcessor:
     @staticmethod
     async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig):
         while True:
-            print("here")
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
             # (1) if beep found calculate the offset
@@ -154,31 +153,35 @@ class SampleProcessor:
                 samples_queue.task_done()
 
     @staticmethod
-    def decimate_samples(samples, previous_samples, pc: ProcessConfig):
+    def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
         #########################################################################
         samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
         # next two lines are band pass filter?
         samples = signal.convolve(samples, fir(), "same")
         # decimation
-        # recalculation of sample rate due to decimation
-        # sample_rate = pc.sample_rate / 100
-
-        # record this file in the field - for testing log with IQ values
-        # self.f.write(samples.astype(np.complex128))
         samples = np.abs(samples[::100])
-        unfiltered = samples
-        # smoothing
+
+        unsmoothed_samples = samples
+        # smoothing - smoothed samples are good for beep detection only.
         # samples = signal.convolve(samples, [1] * 189, "valid") / 189
         samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
-        return samples, pc.sample_rate / 100
+        return samples, pc.sample_rate / 100, unsmoothed_samples
 
     @staticmethod
-    def get_rising_falling_indices(samples):
+    def get_rising_falling_indices(samples, unsmoothed_samples):
         # Get a boolean array for all samples higher or lower than the threshold
-        threshold = np.median(samples) * 1.8  # go just above noise floor
+        threshold = np.median(samples) * 3  # go just above noise floor - use smoothed samples for beep detection
 
+        # can exit this chunk here early if nothing detected above threshold
+        # if not True in samples >= threshold:
+        # iterate counters
+        # return (go to next chunk)
+
+        # if got to this point - then there is probably a signal in the chunk
         low_samples = samples < threshold
         high_samples = samples >= threshold
+
+        # TODO: exit early here
 
         # Compute the rising edge and falling edges by comparing the current value to the next with
         # the boolean operator & (if both are true the result is true) and converting this to an index
@@ -234,20 +237,16 @@ class SampleProcessor:
             tot_samp_count = tot_samp_count + len(samples)
 
             # print(f"Received sample: {samples.size}")
-            samples, sample_rate = self.decimate_samples(samples, previous_samples, pc)
-            previous_samples = samples
+            samples, sample_rate, unsmoothed_samples = self.decimate_samples(samples, previous_samples, pc, chunk_count)
+            previous_samples = unsmoothed_samples
 
             # ... = dbc.send(samples, sample_rate)
 
-            rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples)
-
-            if (len(rising_edge_idx) == 0 and len(falling_edge_idx == 1)) or chunk_count in (39, 40, 41):
-                print(chunk_count)
-                # plt.plot(samples)
-                # plt.show()
+            rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples, unsmoothed_samples)
 
             # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
             print(rising_edge_idx, falling_edge_idx, beep_slice)
+            print(f"Chunk Count : {chunk_count}")
 
             if len(rising_edge_idx) > 0:
                 # print(f"len rising edges idx {len(rising_edge_idx)}")
@@ -332,14 +331,14 @@ class SampleProcessor:
             # BEEP DURATION
             if beep_slice:
                 if len(falling_edge_idx) != 0:
-                    BEEP_DURATION = (falling_edge_idx[0] + distance_to_sample_end) / sample_rate
+                    BEEP_DURATION = ((falling_edge_idx[0] + distance_to_sample_end) / sample_rate) / 1.8
                     # self.beep_slice = False
                 else:
                     BEEP_DURATION = 0
                     # print(f"setting beep slice false on ln 273")
                     # self.beep_slice = False
             else:
-                BEEP_DURATION = (falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate
+                BEEP_DURATION = ((falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate) / 1.8
 
             # GET GPS INFO FROM GPSD
             if self.config.running_mode == "normal":
