@@ -127,6 +127,9 @@ class SampleProcessor:
                 # plt.show()
                 # print(f"{np.max(fft)/np.median(fft)}")
 
+                # DC Spike removal
+                fft[len(fft)//2] = np.mean(fft[ (len(fft)//2) -10 : (len(fft)//2) -3 ])
+
                 if (np.max(fft) / np.median(fft)) > 20:
                     # if np.max(fft) > fft_thresh:
                     fft_freqs = np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)
