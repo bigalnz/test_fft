@@ -7,6 +7,7 @@ import math
 import os
 import platform
 import statistics
+import sys
 import time
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ from scipy import signal
 from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import (FloatArray, ProcessConfig, ProcessResult,
                                 SamplesT)
+from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 
 if platform.system() == "Linux":
@@ -93,8 +95,10 @@ class SampleProcessor:
         self.dbfslist = []
 
     @staticmethod
-    async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig):
-        while True:
+    async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig, N: int):
+        counter = 0
+        while counter < N:
+
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
             # (1) if beep found calculate the offset
@@ -152,6 +156,8 @@ class SampleProcessor:
             else:
                 samples_queue.task_done()
 
+            counter += 1
+
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
         #########################################################################
@@ -191,23 +197,23 @@ class SampleProcessor:
 
         return rising_edge_idx, falling_edge_idx
 
-    @staticmethod
-    def detect_beep_coro(pc):
-        samples, sample_rate = yield
+    # @staticmethod
+    # def detect_beep_coro(pc):
+    #     samples, sample_rate = yield
 
-        while True:
-            rising_edge_idx, falling_edge_idx = SampleProcessor.get_rising_falling_indices(samples)
+    #     while True:
+    #         rising_edge_idx, falling_edge_idx = SampleProcessor.get_rising_falling_indices(samples)
 
-            # not rising, nor falling, return None and wait for other sample
-            if not rising_edge_idx and not falling_edge_idx:
-                samples, sample_rate = yield None
-            # are we in sliced beep?
-            elif len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
-                rising_idx = rising_edge_idx[0]
-                first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
-                # yes, so return None and wait for falling
-                while True:
-                    samples, sample_rate = yield None
+    #         # not rising, nor falling, return None and wait for other sample
+    #         if not rising_edge_idx and not falling_edge_idx:
+    #             samples, sample_rate = yield None
+    #         # are we in sliced beep?
+    #         elif len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
+    #             rising_idx = rising_edge_idx[0]
+    #             first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
+    #             # yes, so return None and wait for falling
+    #             while True:
+    #                 samples, sample_rate = yield None
 
     async def process_sample(self, pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
         rising_edge = 0
@@ -223,7 +229,16 @@ class SampleProcessor:
         distance_to_sample_end = None
         first_half_of_sliced_beep = 0
 
-        print()
+        if pc.carrier_freq is None:
+            self.logger.info("Carrier frequency not set - start scanning...")
+
+            freq = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
+            if freq is None:
+                self.logger.error("Frequency not detected, exiting...")
+                raise CarrierFrequencyNotFound()
+            else:
+                self.logger.info(f"Frequency detected: {freq}")
+                pc.carrier_freq = freq
 
         while True:
             samples = await samples_queue.get()
@@ -375,10 +390,10 @@ class SampleProcessor:
 
         # first, find frequency offset (if not set via command line arguments)
         # Add logic - If --scan is passed then send the first 3 seconds of samples to be scanned
-        if pc.freq_offset == 0:
-            pc.carrier_freq = await SampleProcessor.find_beep_freq_2(
-                samples_queue=samples_queue, logger=self.logger, pc=pc
-            )
+        # if pc.freq_offset == 0:
+        #     pc.carrier_freq = await SampleProcessor.find_beep_freq_2(
+        #         samples_queue=samples_queue, logger=self.logger, pc=pc
+        #     )
 
         await self.process_sample(pc, samples_queue, out_queue)
 

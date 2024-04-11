@@ -1,0 +1,2 @@
+class CarrierFrequencyNotFound(Exception):
+    pass

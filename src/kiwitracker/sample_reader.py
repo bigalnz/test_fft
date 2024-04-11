@@ -16,6 +16,7 @@ RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 import time
 
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
+from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.sample_processor import SampleProcessor
 
 
@@ -452,10 +453,10 @@ def main():
         help='Number of samples to read when "-o/--outfile" is specified',
     )
     p.add_argument(
-        '--scan',
-        dest='scan',
-        action='store_true',
-        help='Scan for frequencies in first 3sec',
+        "--scan",
+        dest="scan",
+        action="store_true",
+        help="Scan for frequencies in first 3sec",
     )
 
     s_group = p.add_argument_group("Sampling")
@@ -502,11 +503,19 @@ def main():
         "--carrier",
         dest="carrier",
         type=float,
-        default=ProcessConfig.carrier_freq,
+        nargs="?",
+        const=ProcessConfig.carrier_freq,
+        # default=ProcessConfig.carrier_freq,
         help="Carrier frequency to process (default: %(default)s)",
     )
 
     args = p.parse_args()
+
+    if args.scan and args.carrier is not None:
+        print("--scan and --carrier cannot be provided simultaneously.")
+        return
+    elif not args.scan and args.carrier is None:
+        args.carrier_freq = ProcessConfig.carrier_freq
 
     sample_config = SampleConfig(
         sample_rate=args.sample_rate,
@@ -516,11 +525,12 @@ def main():
         read_size=args.chunk_size,
     )
 
+    # if args.scan and
     process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
 
-    #print(sample_config)
-    #print(process_config)
-    #return
+    # print(sample_config)
+    # print(process_config)
+    # return
 
     if args.infile is not None:
         process_config.running_mode = "disk"
@@ -607,7 +617,7 @@ def chunk_numpy_file(filename, dtype, N):
         arr = np.fromfile(filename, dtype=dtype, count=N, offset=current_offset)
 
         # Convert unsigned 8 bit samples to 32 bit floats and complex
-        if dtype == 'int8':
+        if dtype == "int8":
             iq = arr.astype(np.float32).view(np.complex64)
             iq /= 127.5
             iq -= 1 + 1j
@@ -624,19 +634,7 @@ def chunk_numpy_file(filename, dtype, N):
         current_offset += N * dtype.itemsize
 
 
-async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
-    file_dtype = filename_to_dtype(filename)
-
-    processor = SampleProcessor(process_config)
-
-    samples_queue = asyncio.Queue()
-
-    sample_processor_task = asyncio.Task(processor.process_2(process_config, samples_queue, out_queue))
-
-    start_time = time.time()
-
-    N = process_config.num_samples_to_process
-
+async def put_chunks_from_file_to_queue(samples_queue, filename, file_dtype, N, num_chunks):
     for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
         await samples_queue.put(chunk)
 
@@ -646,10 +644,37 @@ async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
     await samples_queue.put(None)  # Indicate that we are done with samples
     await samples_queue.join()
 
-    finish_time = time.time()
-    print(f" run time is {finish_time-start_time:.2f}")
 
-    del sample_processor_task
+async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
+    file_dtype = filename_to_dtype(filename)
+
+    processor = SampleProcessor(process_config)
+
+    samples_queue = asyncio.Queue()
+
+    try:
+        # task 1 - sample processor
+        sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))
+
+        # task 2 - put chunks from file to queue
+        chunk_putter = asyncio.create_task(
+            put_chunks_from_file_to_queue(
+                samples_queue, filename, file_dtype, process_config.num_samples_to_process, num_chunks
+            )
+        )
+
+        start_time = time.time()
+        await asyncio.gather(sample_processor_task, chunk_putter)
+
+    except CarrierFrequencyNotFound:
+
+        print("Carrier frequency not found, interrupting sample processing...")
+        return
+
+    finally:
+        finish_time = time.time()
+        print(f" run time is {finish_time-start_time:.2f}")
+        del sample_processor_task
 
 
 # new from_disk() head:
