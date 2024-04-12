@@ -97,7 +97,12 @@ class SampleProcessor:
     @staticmethod
     async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig, N: int):
         counter = 0
-        while counter < N:
+
+        out = []
+
+        for i in range(N):
+
+            logger.info(f"Scanning chunk no. {i+1}...")
 
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
@@ -128,7 +133,7 @@ class SampleProcessor:
                 # print(f"{np.max(fft)/np.median(fft)}")
 
                 # DC Spike removal
-                fft[len(fft)//2] = np.mean(fft[ (len(fft)//2) -10 : (len(fft)//2) -3 ])
+                fft[len(fft) // 2] = np.mean(fft[(len(fft) // 2) - 10 : (len(fft) // 2) - 3])
 
                 if (np.max(fft) / np.median(fft)) > 20:
                     # if np.max(fft) > fft_thresh:
@@ -158,11 +163,13 @@ class SampleProcessor:
 
                 samples_queue.task_done()
                 # return beep_freqs[0], beep_freqs[0] + center_freq
-                return beep_freqs[0] + pc.sample_config.center_freq
+                out.append(beep_freqs[0] + pc.sample_config.center_freq)
             else:
                 samples_queue.task_done()
 
             counter += 1
+
+        return out
 
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
@@ -238,13 +245,14 @@ class SampleProcessor:
         if pc.carrier_freq is None:
             self.logger.info("Carrier frequency not set - start scanning...")
 
-            freq = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
-            if freq is None:
-                self.logger.error("Frequency not detected, exiting...")
+            frequencies = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
+            if not frequencies:
+                self.logger.error("Not single frequency detected, exiting...")
                 raise CarrierFrequencyNotFound()
             else:
-                self.logger.info(f"Frequency detected: {freq}")
-                pc.carrier_freq = freq
+                self.logger.info(f"Frequencies detected: {frequencies}")
+                self.logger.info(f"Picking first one: {frequencies[0]}")
+                pc.carrier_freq = frequencies[0]
 
         while True:
             samples = await samples_queue.get()
