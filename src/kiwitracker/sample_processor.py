@@ -96,8 +96,11 @@ class SampleProcessor:
 
     @staticmethod
     async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig, N: int):
-        counter = 0
-        while counter < N:
+        out = []
+
+        for i in range(N):
+
+            logger.info(f"Scanning chunk no. {i+1}...")
 
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
@@ -128,7 +131,7 @@ class SampleProcessor:
                 # print(f"{np.max(fft)/np.median(fft)}")
 
                 # DC Spike removal
-                fft[len(fft)//2] = np.mean(fft[ (len(fft)//2) -10 : (len(fft)//2) -3 ])
+                fft[len(fft) // 2] = np.mean(fft[(len(fft) // 2) - 10 : (len(fft) // 2) - 3])
 
                 if (np.max(fft) / np.median(fft)) > 20:
                     # if np.max(fft) > fft_thresh:
@@ -145,24 +148,13 @@ class SampleProcessor:
                     # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
             if len(beep_freqs) != 0:
-                bp = np.array(beep_freqs)
-                bp = bp + pc.sample_config.center_freq
-                bp = bp.astype(np.int64)
-                beep_freqs_singular = [
-                    statistics.mean(x) for _, x in itertools.groupby(sorted(bp), key=lambda f: (f + 5000) // 10000)
-                ]
                 logger.info(f"detected beep_freqs offsets is {beep_freqs}")
-                logger.info(f"detected beep_freqs_singular offsets is {beep_freqs_singular}")
+                logger.info(f"appending to output {beep_freqs[0] + pc.sample_config.center_freq}")
+                out.append(beep_freqs[0] + pc.sample_config.center_freq)
 
-                # print(f"about to set freq_offset. beep_freqs[0] is {beep_freqs[0]} and the np.max(fft) is {np.max(fft)}")
+            samples_queue.task_done()
 
-                samples_queue.task_done()
-                # return beep_freqs[0], beep_freqs[0] + center_freq
-                return beep_freqs[0] + pc.sample_config.center_freq
-            else:
-                samples_queue.task_done()
-
-            counter += 1
+        return [statistics.mean(x) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
 
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
@@ -238,13 +230,14 @@ class SampleProcessor:
         if pc.carrier_freq is None:
             self.logger.info("Carrier frequency not set - start scanning...")
 
-            freq = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
-            if freq is None:
-                self.logger.error("Frequency not detected, exiting...")
+            frequencies = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
+            if not frequencies:
+                self.logger.error("Not single frequency detected, exiting...")
                 raise CarrierFrequencyNotFound()
             else:
-                self.logger.info(f"Frequency detected: {freq}")
-                pc.carrier_freq = freq
+                self.logger.info(f"Frequencies detected: {frequencies}")
+                self.logger.info(f"Picking first one: {frequencies[0]}")
+                pc.carrier_freq = frequencies[0]
 
         while True:
             samples = await samples_queue.get()
