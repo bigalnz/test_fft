@@ -138,6 +138,9 @@ class SampleProcessor:
                     # plt.show()
                     # print(f"{np.median(fft)}")
                     # print(f"{np.max(fft)}")
+
+                    # This needs to be changes to np.argwhere((np.max(fft) / np.median(fft)) > 20)
+                    # So it adds all freqs detected over the threshold
                     beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
                     # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
