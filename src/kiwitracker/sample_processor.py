@@ -153,6 +153,7 @@ class SampleProcessor:
                 logger.info(f"detected beep_freqs offsets is {beep_freqs}")
                 logger.info(f"appending to output {beep_freqs[0] + pc.sample_config.center_freq}")
                 beep_freqs = np.array(beep_freqs) + pc.sample_config.center_freq
+                beep_freqs[(beep_freqs >= 160100110 ) & (beep_freqs <= 161120000)]
                 beep_freqs = beep_freqs.tolist()
                 out.extend(beep_freqs)
 
