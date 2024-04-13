@@ -47,9 +47,9 @@ class ProcessConfig:
     num_samples_to_process: int = int(2.5e5)
     """Number of samples needed to process"""
 
-    running_mode: str = "normal"
+    running_mode: str = "radio"
     """
-        "normal" - read from radio
+        "radio" - read from radio
         "disk" - data are from disk
     """
 

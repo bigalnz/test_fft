@@ -544,6 +544,12 @@ def main():
                 out_queue=out_queue,
             )
         )
+    elif args.outfile is not None:
+        print("Readonly mode not implemented (yet.)")
+        return
+    else:
+        process_config.running_mode = "radio"
+        asyncio.run(run_main_2(sample_config=sample_config, process_config=process_config))
 
     # if args.infile is not None:
     #     process_config.running_mode = "disk"
@@ -678,38 +684,38 @@ async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
         del sample_processor_task
 
 
-def run_from_disk(process_config: ProcessConfig, filename: str):
-    file_dtype = filename_to_dtype(filename)
+# def run_from_disk(process_config: ProcessConfig, filename: str):
+#     file_dtype = filename_to_dtype(filename)
 
-    print(f"Loading samples from {filename} with data type {file_dtype}")
-    samples = np.fromfile(filename, dtype=file_dtype)
-    print(f"{len(samples)} samples loaded")
+#     print(f"Loading samples from {filename} with data type {file_dtype}")
+#     samples = np.fromfile(filename, dtype=file_dtype)
+#     print(f"{len(samples)} samples loaded")
 
-    # Convert unsigned 8 bit samples to 32 bit floats and complex
-    if file_dtype is np.uint8:
-        iq = samples.astype(np.float32).view(np.complex64)
-        iq /= 127.5
-        iq -= 1 + 1j
-        samples = iq.copy()
+#     # Convert unsigned 8 bit samples to 32 bit floats and complex
+#     if file_dtype is np.uint8:
+#         iq = samples.astype(np.float32).view(np.complex64)
+#         iq /= 127.5
+#         iq -= 1 + 1j
+#         samples = iq.copy()
 
-    if file_dtype == np.complex128:
-        samples = samples.astype(np.complex64)
+#     if file_dtype == np.complex128:
+#         samples = samples.astype(np.complex64)
 
-    processor = SampleProcessor(process_config)
+#     processor = SampleProcessor(process_config)
 
-    # Organize input samples into chunks, resize handles padding the end with zeroes
-    # Better would be to only read single chunks from the file
-    chunk_len = processor.num_samples_to_process
-    n_chunks = np.floor(samples.size / chunk_len).astype(int)
-    samples.resize(n_chunks, chunk_len)
+#     # Organize input samples into chunks, resize handles padding the end with zeroes
+#     # Better would be to only read single chunks from the file
+#     chunk_len = processor.num_samples_to_process
+#     n_chunks = np.floor(samples.size / chunk_len).astype(int)
+#     samples.resize(n_chunks, chunk_len)
 
-    start_time = time.time()
+#     start_time = time.time()
 
-    for chunk in samples:
-        processor.process(chunk)
+#     for chunk in samples:
+#         processor.process(chunk)
 
-    finish_time = time.time()
-    print(f" run time is {finish_time-start_time:.2f}")
+#     finish_time = time.time()
+#     print(f" run time is {finish_time-start_time:.2f}")
 
 
 async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
@@ -726,6 +732,39 @@ async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
             await asyncio.to_thread(processor.process, samples)
             # finish_time = time.time() - start_time
             # print(f" prcoessor took : {finish_time}")
+
+
+# this will just read from the queue and drop any data
+async def _out_queue_reader(out_queue: asyncio.Queue):
+    while True:
+        _ = await out_queue.get()
+        out_queue.task_done()
+
+
+async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig):
+    reader = SampleReader(sample_config)
+    processor = SampleProcessor(process_config)
+    buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
+    reader.buffer = buffer
+
+    samples_queue = asyncio.Queue()
+
+    # for now, the result from process_2 will be stored here
+    out_queue = asyncio.Queue()
+
+    sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))
+    null_data_reader = asyncio.create_task(_out_queue_reader(out_queue))
+
+    async with reader:
+        await reader.open_stream()
+        while True:
+            samples = await buffer.get(processor.num_samples_to_process)
+            await samples_queue.put(samples)
+
+            # start_time = time.time()
+            # await asyncio.to_thread(processor.process, samples)
+            # finish_time = time.time() - start_time
+            # print(f" processor took : {finish_time}")
 
 
 if __name__ == "__main__":

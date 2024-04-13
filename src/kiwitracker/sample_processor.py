@@ -77,7 +77,7 @@ class SampleProcessor:
     def __init__(self, config: ProcessConfig) -> None:
         self.config = config
 
-        if config.running_mode == "normal":
+        if config.running_mode == "radio":
             gpsd.connect()
 
         self.sample_checker = 0
@@ -370,7 +370,7 @@ class SampleProcessor:
                 BEEP_DURATION = ((falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate) / 1.8
 
             # GET GPS INFO FROM GPSD
-            if self.config.running_mode == "normal":
+            if self.config.running_mode == "radio":
                 packet = gpsd.get_current()
                 latitude = packet.lat
                 longitude = packet.lon
