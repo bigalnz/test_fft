@@ -99,7 +99,6 @@ class SampleProcessor:
         out = []
 
         for i in range(N):
-
             logger.info(f"Scanning chunk no. {i+1}...")
 
             # print("find beep freq ran")
@@ -144,23 +143,27 @@ class SampleProcessor:
 
                     # This needs to be changes to np.argwhere((np.max(fft) / np.median(fft)) > 20)
                     # So it adds all freqs detected over the threshold
-                    #noise_floor = np.median(fft) * 5
-                    #beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
-                    beep_freqs.extend(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[signal.find_peaks(fft, prominence=0.3)[0]])
+                    # noise_floor = np.median(fft) * 5
+                    # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
+                    beep_freqs.extend(
+                        np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[
+                            signal.find_peaks(fft, prominence=0.3)[0]
+                        ]
+                    )
                     # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
             if len(beep_freqs) != 0:
                 logger.info(f"detected beep_freqs offsets is {beep_freqs}")
                 logger.info(f"appending to output {beep_freqs[0] + pc.sample_config.center_freq}")
                 beep_freqs = np.array(beep_freqs) + pc.sample_config.center_freq
-                beep_freqs[(beep_freqs >= 160100110 ) & (beep_freqs <= 161120000)]
+                beep_freqs[(beep_freqs >= 160100110) & (beep_freqs <= 161120000)]
                 beep_freqs = beep_freqs.tolist()
                 out.extend(beep_freqs)
 
             samples_queue.task_done()
 
         out = [statistics.mean(x) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
-        return [int(out) for out in out ]
+        return [int(out) for out in out]
 
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):

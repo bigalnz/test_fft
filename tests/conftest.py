@@ -3,6 +3,8 @@ conftest.py - pytest will automatically detect this file
 and use fixtures defined here in all tests
 """
 
+import logging
+
 import numpy as np
 import pytest
 
@@ -25,7 +27,7 @@ def tmp_npy_file_uint32(tmp_path_factory):
     return fn
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def sample_config():
     return SampleConfig(
         sample_rate=1024000.0,
@@ -37,7 +39,7 @@ def sample_config():
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def process_config(sample_config):
     return ProcessConfig(
         sample_config=sample_config,
@@ -45,3 +47,18 @@ def process_config(sample_config):
         num_samples_to_process=250000,
         running_mode="disk",
     )
+
+
+@pytest.fixture(scope="session")
+def logger():
+    l = logging.getLogger("KiwiTracker")
+    l.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    ch.setFormatter(formatter)
+
+    l.addHandler(ch)
+    return l
