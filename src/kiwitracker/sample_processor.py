@@ -44,6 +44,11 @@ def phasor(num_samples_to_process, sample_rate, freq_offset) -> np.ndarray:
     return np.exp(2j * np.pi * time_array(num_samples_to_process, sample_rate) * freq_offset)
 
 
+@lru_cache(maxsize=5)
+def fft_freqs_array(sample_rate, fft_size) -> np.ndarray:
+    return np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+
+
 def snr(high_samples, low_samples):
     noise_pwr = np.var(low_samples)
     signal_pwr = np.var(high_samples)
@@ -96,10 +101,10 @@ class SampleProcessor:
 
     @staticmethod
     async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig, N: int):
-        out = []
+        out = set()
 
         for i in range(N):
-            logger.info(f"Scanning chunk no. {i+1}...")
+            logger.debug(f"Scanning chunk no. {i+1}...")
 
             # print("find beep freq ran")
             # look for the presence of a beep within the chunk and :
@@ -118,12 +123,12 @@ class SampleProcessor:
             step = int(size // 1.1)
             samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
             num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
-            beep_freqs = []
+            beep_freqs = set()
 
             i = 0
             for i in range(num_ffts):
                 # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / pc.fft_size
+                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / size
 
                 # plt.plot(fft)
                 # plt.show()
@@ -134,8 +139,8 @@ class SampleProcessor:
 
                 if (np.max(fft) / np.median(fft)) > 20:
                     # if np.max(fft) > fft_thresh:
-                    fft_freqs = np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)
-                    fft_freqs = fft_freqs + pc.sample_config.center_freq
+                    # fft_freqs = fft_freqs_array(pc.sample_rate, size) + pc.sample_config.center_freq
+
                     # plt.plot(fft_freqs, fft)
                     # plt.show()
                     # print(f"{np.median(fft)}")
@@ -145,25 +150,26 @@ class SampleProcessor:
                     # So it adds all freqs detected over the threshold
                     # noise_floor = np.median(fft) * 5
                     # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
-                    beep_freqs.extend(
-                        np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[
-                            signal.find_peaks(fft, prominence=0.3)[0]
-                        ]
-                    )
+
+                    peaks = signal.find_peaks(fft, prominence=0.3)[0]
+                    beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
+
                     # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
             if len(beep_freqs) != 0:
-                logger.info(f"detected beep_freqs offsets is {beep_freqs}")
-                logger.info(f"appending to output {beep_freqs[0] + pc.sample_config.center_freq}")
-                beep_freqs = np.array(beep_freqs) + pc.sample_config.center_freq
-                beep_freqs[(beep_freqs >= 160100110) & (beep_freqs <= 161120000)]
-                beep_freqs = beep_freqs.tolist()
-                out.extend(beep_freqs)
+                logger.debug(f"detected beep_freqs offsets is {beep_freqs}")
+                out = {
+                    *out,
+                    *(
+                        new_f
+                        for f in beep_freqs
+                        if 160_100_110 <= (new_f := f + pc.sample_config.center_freq) <= 161_120_000
+                    ),
+                }
 
             samples_queue.task_done()
 
-        out = [statistics.mean(x) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
-        return [int(out) for out in out]
+        return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
 
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
@@ -244,7 +250,7 @@ class SampleProcessor:
                 self.logger.error("Not single frequency detected, exiting...")
                 raise CarrierFrequencyNotFound()
             else:
-                self.logger.info(f"Frequencies detected: {frequencies}")
+                self.logger.info(f"Frequencies detected: {frequencies} - end scanning...")
                 self.logger.info(f"Picking first one: {frequencies[0]}")
                 pc.carrier_freq = frequencies[0]
 
