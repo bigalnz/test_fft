@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from kiwitracker.common import ProcessConfig, SampleConfig
-from kiwitracker.sample_processor import SampleProcessor, find_beep_frequencies
+from kiwitracker.sample_processor import find_beep_frequencies
 from kiwitracker.sample_reader import (chunk_numpy_file,
                                        put_chunks_from_file_to_queue,
                                        run_from_disk_2)

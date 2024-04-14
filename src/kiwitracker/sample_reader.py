@@ -16,7 +16,7 @@ from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
-from kiwitracker.sample_processor import SampleProcessor
+from kiwitracker.sample_processor import process_sample
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
@@ -653,13 +653,11 @@ async def put_chunks_from_file_to_queue(samples_queue, filename, file_dtype, N, 
 async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
     file_dtype = filename_to_dtype(filename)
 
-    processor = SampleProcessor(process_config)
-
     samples_queue = asyncio.Queue()
 
     try:
         # task 1 - sample processor
-        sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))
+        sample_processor_task = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))
 
         # task 2 - put chunks from file to queue
         chunk_putter = asyncio.create_task(
@@ -741,7 +739,6 @@ async def _out_queue_reader(out_queue: asyncio.Queue):
 
 async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig):
     reader = SampleReader(sample_config)
-    processor = SampleProcessor(process_config)
     buffer = SampleBuffer(maxsize=process_config.num_samples_to_process * 3)
     reader.buffer = buffer
 
@@ -750,7 +747,7 @@ async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig)
     # for now, the result from process_2 will be stored here
     out_queue = asyncio.Queue()
 
-    sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))  # noqa
+    sample_processor_task = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))  # noqa
     null_data_reader = asyncio.create_task(_out_queue_reader(out_queue))  # noqa
 
     async with reader:
