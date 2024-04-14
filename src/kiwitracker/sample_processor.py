@@ -86,6 +86,34 @@ def decimate_samples(
     return samples, pc.sample_rate / 100, unsmoothed_samples
 
 
+def rising_falling_indices(samples: np.ndarray, unsmoothed_samples: np.ndarray) -> tuple[list[int], list[int]]:
+    """
+    Returns: tuple of rising edge indices, falling edge indices
+    """
+
+    # Get a boolean array for all samples higher or lower than the threshold
+    threshold = np.median(samples) * 3  # go just above noise floor - use smoothed samples for beep detection
+
+    # can exit this chunk here early if nothing detected above threshold
+    # if not True in samples >= threshold:
+    # iterate counters
+    # return (go to next chunk)
+
+    # if got to this point - then there is probably a signal in the chunk
+    low_samples = samples < threshold
+    high_samples = samples >= threshold
+
+    # TODO: exit early here
+
+    # Compute the rising edge and falling edges by comparing the current value to the next with
+    # the boolean operator & (if both are true the result is true) and converting this to an index
+    # into the current array
+    rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+    falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+
+    return rising_edge_idx, falling_edge_idx
+
+
 async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig, N: int) -> list[int]:
     """
     Find beep frequencies from first N chunks.
@@ -192,48 +220,6 @@ class SampleProcessor:
         self.snrlist = []
         self.dbfslist = []
 
-    @staticmethod
-    def get_rising_falling_indices(samples, unsmoothed_samples):
-        # Get a boolean array for all samples higher or lower than the threshold
-        threshold = np.median(samples) * 3  # go just above noise floor - use smoothed samples for beep detection
-
-        # can exit this chunk here early if nothing detected above threshold
-        # if not True in samples >= threshold:
-        # iterate counters
-        # return (go to next chunk)
-
-        # if got to this point - then there is probably a signal in the chunk
-        low_samples = samples < threshold
-        high_samples = samples >= threshold
-
-        # TODO: exit early here
-
-        # Compute the rising edge and falling edges by comparing the current value to the next with
-        # the boolean operator & (if both are true the result is true) and converting this to an index
-        # into the current array
-        rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-        falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
-
-        return rising_edge_idx, falling_edge_idx
-
-    # @staticmethod
-    # def detect_beep_coro(pc):
-    #     samples, sample_rate = yield
-
-    #     while True:
-    #         rising_edge_idx, falling_edge_idx = SampleProcessor.get_rising_falling_indices(samples)
-
-    #         # not rising, nor falling, return None and wait for other sample
-    #         if not rising_edge_idx and not falling_edge_idx:
-    #             samples, sample_rate = yield None
-    #         # are we in sliced beep?
-    #         elif len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
-    #             rising_idx = rising_edge_idx[0]
-    #             first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
-    #             # yes, so return None and wait for falling
-    #             while True:
-    #                 samples, sample_rate = yield None
-
     async def process_sample(self, pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
         rising_edge = 0
         falling_edge = 0
@@ -277,7 +263,7 @@ class SampleProcessor:
 
             # ... = dbc.send(samples, sample_rate)
 
-            rising_edge_idx, falling_edge_idx = self.get_rising_falling_indices(samples, unsmoothed_samples)
+            rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
 
             # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
             print(rising_edge_idx, falling_edge_idx, beep_slice)
