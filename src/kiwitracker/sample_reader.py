@@ -17,6 +17,7 @@ import time
 
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.exceptions import CarrierFrequencyNotFound
+from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.sample_processor import SampleProcessor
 
 
@@ -204,7 +205,7 @@ class SampleReader:
     def _open(self):
         assert self.sdr is None
         if TYPE_CHECKING:
-            # NOTE: Another workaround for the above TYPE_CHECKING stuff
+            # NOTE: Another workaround for the above TYPE_CHECKING stuffLIN
             #       (just ignore for now)
             assert RtlSdr is not None
         sdr = self.sdr = RtlSdr()
@@ -458,6 +459,12 @@ def main():
         action="store_true",
         help="Scan for frequencies in first 3sec",
     )
+    p.add_argument(
+        "--no-use-gps",
+        dest="no_use_gps",
+        action="store_true",
+        help="Set this flag to not use GPS module",
+    )
 
     s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
@@ -517,6 +524,13 @@ def main():
     elif not args.scan and args.carrier is None:
         args.carrier_freq = ProcessConfig.carrier_freq
 
+    if args.no_use_gps:
+        gps_module = GPSDummy()
+    else:
+        gps_module = GPSReal()
+
+    gps_module.connect()
+
     sample_config = SampleConfig(
         sample_rate=args.sample_rate,
         center_freq=args.center_freq,
@@ -526,7 +540,11 @@ def main():
     )
 
     # if args.scan and
-    process_config = ProcessConfig(sample_config=sample_config, carrier_freq=args.carrier)
+    process_config = ProcessConfig(
+        sample_config=sample_config,
+        carrier_freq=args.carrier,
+        gps_module=gps_module,
+    )
 
     # print(sample_config)
     # print(process_config)

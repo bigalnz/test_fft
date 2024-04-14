@@ -10,6 +10,7 @@ import statistics
 import sys
 import time
 from datetime import datetime
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -22,11 +23,6 @@ from kiwitracker.common import (FloatArray, ProcessConfig, ProcessResult,
                                 SamplesT)
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
-
-if platform.system() == "Linux":
-    import gpsd
-
-from functools import lru_cache
 
 
 @lru_cache(maxsize=1)
@@ -76,9 +72,6 @@ class SampleProcessor:
 
     def __init__(self, config: ProcessConfig) -> None:
         self.config = config
-
-        if config.running_mode == "radio":
-            gpsd.connect()
 
         self.sample_checker = 0
         # create logger
@@ -369,15 +362,7 @@ class SampleProcessor:
             else:
                 BEEP_DURATION = ((falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate) / 1.8
 
-            # GET GPS INFO FROM GPSD
-            if self.config.running_mode == "radio":
-                packet = gpsd.get_current()
-                latitude = packet.lat
-                longitude = packet.lon
-            else:
-                # use a default value for now
-                latitude = -36.8807
-                longitude = 174.924
+            latitude, longitude = pc.gps_module.get_current()
 
             print(f"{rising_edge=} {falling_edge=}")
 

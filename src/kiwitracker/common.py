@@ -1,9 +1,11 @@
 import datetime
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import numpy.typing as npt
+
+from kiwitracker.gps import GPSBase, GPSDummy
 
 SamplesT = npt.NDArray[np.complex128]
 """Alias for sample arrays"""
@@ -37,6 +39,8 @@ class SampleConfig:
 @dataclass
 class ProcessConfig:
     sample_config: SampleConfig
+
+    gps_module: GPSBase = field(default_factory=lambda: GPSDummy())
 
     # carrier_freq: float = 160_708_253
     carrier_freq: float = 160_270_968
