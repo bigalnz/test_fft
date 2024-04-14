@@ -744,7 +744,7 @@ async def _out_queue_reader(out_queue: asyncio.Queue):
 async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig):
     reader = SampleReader(sample_config)
     processor = SampleProcessor(process_config)
-    buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
+    buffer = SampleBuffer(maxsize=process_config.num_samples_to_process * 3)
     reader.buffer = buffer
 
     samples_queue = asyncio.Queue()
