@@ -758,7 +758,7 @@ async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig)
     async with reader:
         await reader.open_stream()
         while True:
-            samples = await buffer.get(processor.num_samples_to_process)
+            samples = await buffer.get(process_config.num_samples_to_process)
             await samples_queue.put(samples)
 
             # start_time = time.time()
