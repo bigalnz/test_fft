@@ -66,6 +66,84 @@ def dBFS(high_samples):
     return pwr_dbfs
 
 
+async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig, N: int) -> list[int]:
+    """
+    Find beep frequencies from first N chunks.
+
+    Returns list of unique frequencies found.
+    """
+
+    out = set()
+
+    for i in range(N):
+        logger.debug(f"Scanning chunk no. {i+1}...")
+
+        # print("find beep freq ran")
+        # look for the presence of a beep within the chunk and :
+        # (1) if beep found calculate the offset
+        # (2) if beep not found iterate the counters and move on
+
+        # TO DO
+        # This function only to be called when --scan is given on command line
+        # This function needs to operated on the first 12 chunks (3 seconds) of data
+        # The detected beep array should reject any value not between 160110000 and 161120000
+
+        samples = await samples_queue.get()
+
+        # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+        size = pc.fft_size
+        step = int(size // 1.1)
+        samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
+        num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
+        beep_freqs = set()
+
+        i = 0
+        for i in range(num_ffts):
+            # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
+            fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / size
+
+            # plt.plot(fft)
+            # plt.show()
+            # print(f"{np.max(fft)/np.median(fft)}")
+
+            # DC Spike removal
+            fft[len(fft) // 2] = np.mean(fft[(len(fft) // 2) - 10 : (len(fft) // 2) - 3])
+
+            if (np.max(fft) / np.median(fft)) > 20:
+                # if np.max(fft) > fft_thresh:
+                # fft_freqs = fft_freqs_array(pc.sample_rate, size) + pc.sample_config.center_freq
+
+                # plt.plot(fft_freqs, fft)
+                # plt.show()
+                # print(f"{np.median(fft)}")
+                # print(f"{np.max(fft)}")
+
+                # This needs to be changes to np.argwhere((np.max(fft) / np.median(fft)) > 20)
+                # So it adds all freqs detected over the threshold
+                # noise_floor = np.median(fft) * 5
+                # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
+
+                peaks = signal.find_peaks(fft, prominence=0.3)[0]
+                beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
+
+                # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
+
+        if len(beep_freqs) != 0:
+            logger.debug(f"detected beep_freqs offsets is {beep_freqs}")
+            out = {
+                *out,
+                *(
+                    new_f
+                    for f in beep_freqs
+                    if 160_100_110 <= (new_f := f + pc.sample_config.center_freq) <= 161_120_000
+                ),
+            }
+
+        samples_queue.task_done()
+
+    return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
+
+
 class SampleProcessor:
     config: ProcessConfig
     ct_state: bool
@@ -93,78 +171,6 @@ class SampleProcessor:
         self.ct_state = False
         self.snrlist = []
         self.dbfslist = []
-
-    @staticmethod
-    async def find_beep_freq_2(samples_queue, pc: ProcessConfig, N: int):
-        out = set()
-
-        for i in range(N):
-            logger.debug(f"Scanning chunk no. {i+1}...")
-
-            # print("find beep freq ran")
-            # look for the presence of a beep within the chunk and :
-            # (1) if beep found calculate the offset
-            # (2) if beep not found iterate the counters and move on
-
-            # TO DO
-            # This function only to be called when --scan is given on command line
-            # This function needs to operated on the first 12 chunks (3 seconds) of data
-            # The detected beep array should reject any value not between 160110000 and 161120000
-
-            samples = await samples_queue.get()
-
-            # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
-            size = pc.fft_size
-            step = int(size // 1.1)
-            samples_to_send_to_fft = [samples[i : i + size] for i in range(0, len(samples), step)]
-            num_ffts = len(samples_to_send_to_fft)  # // is an integer division which rounds down
-            beep_freqs = set()
-
-            i = 0
-            for i in range(num_ffts):
-                # fft = np.abs(np.fft.fftshift(np.fft.fft(samples[i*fft_size:(i+1)*fft_size]))) / fft_size
-                fft = np.abs(np.fft.fftshift(np.fft.fft(samples_to_send_to_fft[i]))) / size
-
-                # plt.plot(fft)
-                # plt.show()
-                # print(f"{np.max(fft)/np.median(fft)}")
-
-                # DC Spike removal
-                fft[len(fft) // 2] = np.mean(fft[(len(fft) // 2) - 10 : (len(fft) // 2) - 3])
-
-                if (np.max(fft) / np.median(fft)) > 20:
-                    # if np.max(fft) > fft_thresh:
-                    # fft_freqs = fft_freqs_array(pc.sample_rate, size) + pc.sample_config.center_freq
-
-                    # plt.plot(fft_freqs, fft)
-                    # plt.show()
-                    # print(f"{np.median(fft)}")
-                    # print(f"{np.max(fft)}")
-
-                    # This needs to be changes to np.argwhere((np.max(fft) / np.median(fft)) > 20)
-                    # So it adds all freqs detected over the threshold
-                    # noise_floor = np.median(fft) * 5
-                    # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
-
-                    peaks = signal.find_peaks(fft, prominence=0.3)[0]
-                    beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
-
-                    # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
-
-            if len(beep_freqs) != 0:
-                logger.debug(f"detected beep_freqs offsets is {beep_freqs}")
-                out = {
-                    *out,
-                    *(
-                        new_f
-                        for f in beep_freqs
-                        if 160_100_110 <= (new_f := f + pc.sample_config.center_freq) <= 161_120_000
-                    ),
-                }
-
-            samples_queue.task_done()
-
-        return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
 
     @staticmethod
     def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
@@ -240,9 +246,9 @@ class SampleProcessor:
         if pc.carrier_freq is None:
             logger.info("Carrier frequency not set - start scanning...")
 
-            frequencies = await self.find_beep_freq_2(samples_queue, pc, N=13)
+            frequencies = await find_beep_frequencies(samples_queue, pc, N=13)
             if not frequencies:
-                logger.error("Not single frequency detected, exiting...")
+                logger.error("No frequency detected, exiting...")
                 raise CarrierFrequencyNotFound()
             else:
                 logger.info(f"Frequencies detected: {frequencies} - end scanning...")
