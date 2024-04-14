@@ -8,7 +8,7 @@ class GPSBase(ABC):
     Base abstract class for GPS module
     """
 
-    def __init__():
+    def __init__(self):
         pass
 
     @abstractmethod

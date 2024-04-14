@@ -3,12 +3,13 @@ conftest.py - pytest will automatically detect this file
 and use fixtures defined here in all tests
 """
 
-import logging
-
 import numpy as np
 import pytest
 
 from kiwitracker.common import ProcessConfig, SampleConfig
+from kiwitracker.logging import setup_logging
+
+setup_logging()
 
 
 @pytest.fixture(scope="session")
@@ -47,18 +48,3 @@ def process_config(sample_config):
         num_samples_to_process=250000,
         running_mode="disk",
     )
-
-
-@pytest.fixture(scope="session")
-def logger():
-    l = logging.getLogger("KiwiTracker")
-    l.setLevel(logging.DEBUG)
-
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    ch.setFormatter(formatter)
-
-    l.addHandler(ch)
-    return l

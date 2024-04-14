@@ -24,6 +24,8 @@ from kiwitracker.common import (FloatArray, ProcessConfig, ProcessResult,
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 
+logger = logging.getLogger("KiwiTracker")
+
 
 @lru_cache(maxsize=1)
 def fir() -> np.ndarray:
@@ -75,7 +77,7 @@ class SampleProcessor:
 
         self.sample_checker = 0
         # create logger
-        self.logger = logging.getLogger("KiwiTracker")
+        # self.logger = logging.getLogger("KiwiTracker")
         # self.beep_idx = 0
 
         self.test_samp = np.array(0)
@@ -93,7 +95,7 @@ class SampleProcessor:
         self.dbfslist = []
 
     @staticmethod
-    async def find_beep_freq_2(samples_queue, logger, pc: ProcessConfig, N: int):
+    async def find_beep_freq_2(samples_queue, pc: ProcessConfig, N: int):
         out = set()
 
         for i in range(N):
@@ -236,15 +238,15 @@ class SampleProcessor:
         first_half_of_sliced_beep = 0
 
         if pc.carrier_freq is None:
-            self.logger.info("Carrier frequency not set - start scanning...")
+            logger.info("Carrier frequency not set - start scanning...")
 
-            frequencies = await self.find_beep_freq_2(samples_queue, self.logger, pc, N=13)
+            frequencies = await self.find_beep_freq_2(samples_queue, pc, N=13)
             if not frequencies:
-                self.logger.error("Not single frequency detected, exiting...")
+                logger.error("Not single frequency detected, exiting...")
                 raise CarrierFrequencyNotFound()
             else:
-                self.logger.info(f"Frequencies detected: {frequencies} - end scanning...")
-                self.logger.info(f"Picking first one: {frequencies[0]}")
+                logger.info(f"Frequencies detected: {frequencies} - end scanning...")
+                logger.info(f"Picking first one: {frequencies[0]}")
                 pc.carrier_freq = frequencies[0]
 
         while True:
@@ -367,7 +369,7 @@ class SampleProcessor:
             print(f"{rising_edge=} {falling_edge=}")
 
             # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
-            self.logger.info(
+            logger.info(
                 f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
             )
 

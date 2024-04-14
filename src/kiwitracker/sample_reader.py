@@ -5,20 +5,22 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Self, TypeAlias
 
 import numpy as np
 import rtlsdr
 
-RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
-
-import time
-
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
+from kiwitracker.logging import setup_logging
 from kiwitracker.sample_processor import SampleProcessor
+
+RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
+
+logger = logging.getLogger("KiwiTracker")
 
 
 class SampleReader:
@@ -42,7 +44,7 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task | None = None
-        self.logger = logging.getLogger("KiwiTracker")
+        # self.logger = logging.getLogger("KiwiTracker")
 
     @property
     def sample_rate(self):
@@ -216,17 +218,17 @@ class SampleReader:
             sdr.set_bias_tee(True)
 
         # NOTE: Just for debug purposes. This might help with your gain issue
-        self.logger.info(f" RUN TIME START {datetime.now()} \n")
-        self.logger.info(
+        logger.info(f" RUN TIME START {datetime.now()} \n")
+        logger.info(
             f" ****************************************************************************************************** "
         )
-        self.logger.info(
+        logger.info(
             f" *******          SAMPLING RATE : {sdr.sample_rate}  | CENTER FREQ: {sdr.center_freq}  | GAIN {sdr.gain}                ****** "
         )
-        self.logger.info(
+        logger.info(
             f" ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** "
         )
-        self.logger.info(
+        logger.info(
             f" ****************************************************************************************************** "
         )
         print(f"{self.gain_values_db=}")
@@ -409,29 +411,7 @@ class SampleBuffer:
 
 
 def main():
-
-    # Setup Logging
-    # create logger with 'my_application'
-    logger = logging.getLogger("KiwiTracker")
-    logger.setLevel(logging.DEBUG)
-
-    # create file handler which logs even debug messages
-    print(os.getcwd())
-    fh = logging.FileHandler("kiwitracker.log")
-    fh.setLevel(logging.DEBUG)
-
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-
-    # add the handlers to the logger
-    logger.addHandler(fh)
-    logger.addHandler(ch)
+    setup_logging()
 
     p = argparse.ArgumentParser()
     p.add_argument(
@@ -736,20 +716,20 @@ async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
 #     print(f" run time is {finish_time-start_time:.2f}")
 
 
-async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
-    reader = SampleReader(sample_config)
-    processor = SampleProcessor(process_config)
-    buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
-    reader.buffer = buffer
+# async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
+#     reader = SampleReader(sample_config)
+#     processor = SampleProcessor(process_config)
+#     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
+#     reader.buffer = buffer
 
-    async with reader:
-        await reader.open_stream()
-        while True:
-            samples = await buffer.get(processor.num_samples_to_process)
-            # start_time = time.time()
-            await asyncio.to_thread(processor.process, samples)
-            # finish_time = time.time() - start_time
-            # print(f" prcoessor took : {finish_time}")
+#     async with reader:
+#         await reader.open_stream()
+#         while True:
+#             samples = await buffer.get(processor.num_samples_to_process)
+#             # start_time = time.time()
+#             await asyncio.to_thread(processor.process, samples)
+#             # finish_time = time.time() - start_time
+#             # print(f" prcoessor took : {finish_time}")
 
 
 # this will just read from the queue and drop any data
@@ -770,8 +750,8 @@ async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig)
     # for now, the result from process_2 will be stored here
     out_queue = asyncio.Queue()
 
-    sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))
-    null_data_reader = asyncio.create_task(_out_queue_reader(out_queue))
+    sample_processor_task = asyncio.create_task(processor.process_2(process_config, samples_queue, out_queue))  # noqa
+    null_data_reader = asyncio.create_task(_out_queue_reader(out_queue))  # noqa
 
     async with reader:
         await reader.open_stream()

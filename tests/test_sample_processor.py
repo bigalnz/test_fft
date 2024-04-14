@@ -12,7 +12,7 @@ from kiwitracker.sample_reader import (chunk_numpy_file,
 
 
 @pytest.mark.asyncio
-async def test_scan(request, logger, process_config):
+async def test_scan(request, process_config):
     p = request.config.rootpath / "data" / "test_multiple_4.s8"
 
     process_config.carrier_freq = None
@@ -32,9 +32,7 @@ async def test_scan(request, logger, process_config):
         )
     )
 
-    find_beep_freqs_task = asyncio.create_task(
-        SampleProcessor.find_beep_freq_2(samples_queue, logger, process_config, N=13)
-    )
+    find_beep_freqs_task = asyncio.create_task(SampleProcessor.find_beep_freq_2(samples_queue, process_config, N=13))
 
     result = await asyncio.gather(chunks_task, find_beep_freqs_task)
 
