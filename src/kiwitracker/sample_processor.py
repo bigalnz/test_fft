@@ -66,6 +66,26 @@ def dBFS(high_samples):
     return pwr_dbfs
 
 
+def decimate_samples(
+    samples: np.ndarray, previous_samples: np.ndarray, pc: ProcessConfig
+) -> tuple[np.ndarray, float, np.ndarray]:
+    """
+    Returns: decimated smoothed samples, decimated sample rate and unsmoothed samples
+    """
+
+    samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
+    # next two lines are band pass filter?
+    samples = signal.convolve(samples, fir(), "same")
+    # decimation
+    samples = np.abs(samples[::100])
+
+    unsmoothed_samples = samples
+    # smoothing - smoothed samples are good for beep detection only.
+    # samples = signal.convolve(samples, [1] * 189, "valid") / 189
+    samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
+    return samples, pc.sample_rate / 100, unsmoothed_samples
+
+
 async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig, N: int) -> list[int]:
     """
     Find beep frequencies from first N chunks.
@@ -173,21 +193,6 @@ class SampleProcessor:
         self.dbfslist = []
 
     @staticmethod
-    def decimate_samples(samples, previous_samples, pc: ProcessConfig, chunk_count):
-        #########################################################################
-        samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
-        # next two lines are band pass filter?
-        samples = signal.convolve(samples, fir(), "same")
-        # decimation
-        samples = np.abs(samples[::100])
-
-        unsmoothed_samples = samples
-        # smoothing - smoothed samples are good for beep detection only.
-        # samples = signal.convolve(samples, [1] * 189, "valid") / 189
-        samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
-        return samples, pc.sample_rate / 100, unsmoothed_samples
-
-    @staticmethod
     def get_rising_falling_indices(samples, unsmoothed_samples):
         # Get a boolean array for all samples higher or lower than the threshold
         threshold = np.median(samples) * 3  # go just above noise floor - use smoothed samples for beep detection
@@ -267,7 +272,7 @@ class SampleProcessor:
             tot_samp_count = tot_samp_count + len(samples)
 
             # print(f"Received sample: {samples.size}")
-            samples, sample_rate, unsmoothed_samples = self.decimate_samples(samples, previous_samples, pc, chunk_count)
+            samples, sample_rate, unsmoothed_samples = decimate_samples(samples, previous_samples, pc)
             previous_samples = unsmoothed_samples
 
             # ... = dbc.send(samples, sample_rate)
