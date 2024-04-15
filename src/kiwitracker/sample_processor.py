@@ -194,6 +194,8 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
     Runs forever till reads `None` from samples_queue.
     """
 
+    assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
+
     rising_edge = 0
     falling_edge = 0
     stateful_index = 0
@@ -206,18 +208,6 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
     distance_to_sample_end = None
     first_half_of_sliced_beep = 0
-
-    if pc.carrier_freq is None:
-        logger.info("Carrier frequency not set - start scanning...")
-
-        frequencies = await find_beep_frequencies(samples_queue, pc, N=13)
-        if not frequencies:
-            logger.error("No frequency detected, exiting...")
-            raise CarrierFrequencyNotFound()
-        else:
-            logger.info(f"Frequencies detected: {frequencies} - end scanning...")
-            logger.info(f"Picking first one: {frequencies[0]}")
-            pc.carrier_freq = frequencies[0]
 
     while True:
         samples = await samples_queue.get()
@@ -238,12 +228,10 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
         rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
 
-        # if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
-        print(rising_edge_idx, falling_edge_idx, beep_slice)
-        print(f"Chunk Count : {chunk_count}")
+        if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
+            logger.debug(f"{chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}")
 
         if len(rising_edge_idx) > 0:
-            # print(f"len rising edges idx {len(rising_edge_idx)}")
             rising_edge = rising_edge_idx[0]
 
         if len(falling_edge_idx) > 0:
@@ -336,7 +324,7 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
         latitude, longitude = pc.gps_module.get_current()
 
-        print(f"{rising_edge=} {falling_edge=}")
+        logger.debug(f"{rising_edge=} {falling_edge=}")
 
         # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
         logger.info(
@@ -346,7 +334,7 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         #########################################################################
 
         res = ProcessResult(datetime.now(), BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
-        print(res)
+        logger.debug(res)
 
         await out_queue.put(res)
 

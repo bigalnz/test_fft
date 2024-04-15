@@ -5,7 +5,6 @@ import asyncio
 import concurrent.futures
 import logging
 import os
-import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Self, TypeAlias
 
@@ -16,7 +15,7 @@ from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
-from kiwitracker.sample_processor import process_sample
+from kiwitracker.sample_processor import find_beep_frequencies, process_sample
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
@@ -220,16 +219,16 @@ class SampleReader:
         # NOTE: Just for debug purposes. This might help with your gain issue
         logger.info(f" RUN TIME START {datetime.now()} \n")
         logger.info(
-            f" ****************************************************************************************************** "
+            " ****************************************************************************************************** "
         )
         logger.info(
             f" *******          SAMPLING RATE : {sdr.sample_rate}  | CENTER FREQ: {sdr.center_freq}  | GAIN {sdr.gain}                ****** "
         )
         logger.info(
-            f" ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** "
+            " ******* dBFS closer to 0 is stronger ** Clipping over 0.5 is too much. Saturation at 1 *************** "
         )
         logger.info(
-            f" ****************************************************************************************************** "
+            " ****************************************************************************************************** "
         )
         print(f"{self.gain_values_db=}")
 
@@ -499,7 +498,7 @@ def main():
     args = p.parse_args()
 
     if args.scan and args.carrier is not None:
-        print("--scan and --carrier cannot be provided simultaneously.")
+        logger.error("--scan and --carrier cannot be provided simultaneously.")
         return
     elif not args.scan and args.carrier is None:
         args.carrier_freq = ProcessConfig.carrier_freq
@@ -519,52 +518,60 @@ def main():
         read_size=args.chunk_size,
     )
 
-    # if args.scan and
     process_config = ProcessConfig(
         sample_config=sample_config,
         carrier_freq=args.carrier,
         gps_module=gps_module,
     )
 
-    # print(sample_config)
-    # print(process_config)
-    # return
-
     if args.infile is not None:
-        import cProfile
-        import io
-        import pstats
-        from pstats import SortKey
+        # import cProfile
+        # import io
+        # import pstats
+        # from pstats import SortKey
 
-        pr = cProfile.Profile()
+        # pr = cProfile.Profile()
 
-        pr.enable()
+        # pr.enable()
 
         process_config.running_mode = "disk"
 
-        out_queue = asyncio.Queue()
-
         asyncio.run(
-            run_from_disk_2(
+            pipeline(
                 process_config=process_config,
-                filename=args.infile,
-                out_queue=out_queue,
+                task_samples_input=samples_source_file(
+                    filename=args.infile,
+                    N=process_config.num_samples_to_process,
+                    num_chunks=None,
+                    wait_for_handling=True,
+                ),
             )
         )
 
-        pr.disable()
-        s = io.StringIO()
-        sortby = SortKey.CUMULATIVE
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        print(s.getvalue())
+        # pr.disable()
+        # s = io.StringIO()
+        # sortby = SortKey.CUMULATIVE
+        # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        # ps.print_stats()
+        # print(s.getvalue())
 
     elif args.outfile is not None:
-        print("Readonly mode not implemented (yet.)")
+        logger.error("Readonly mode not implemented (yet.)")
         return
     else:
         process_config.running_mode = "radio"
-        asyncio.run(run_main_2(sample_config=sample_config, process_config=process_config))
+        asyncio.run(
+            pipeline(
+                process_config=process_config,
+                task_samples_input=samples_source_radio(
+                    reader=SampleReader(sample_config),
+                    buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
+                    num_samples_to_process=process_config.num_samples_to_process,
+                ),
+            )
+        )
+
+    # asyncio.run(run_main_2(sample_config=sample_config, process_config=process_config))
 
     # if args.infile is not None:
     #     process_config.running_mode = "disk"
@@ -655,128 +662,99 @@ def chunk_numpy_file(filename, dtype, N):
         current_offset += N * dtype.itemsize
 
 
-async def put_chunks_from_file_to_queue(samples_queue, filename, file_dtype, N, num_chunks, wait_for_handling=True):
-    for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
-        await samples_queue.put(chunk)
-
-        if num_chunks is not None and chunks_processed >= num_chunks:
-            break
-
-    if wait_for_handling:
-        await samples_queue.put(None)  # Indicate that we are done with samples
-        await samples_queue.join()
-
-
-async def run_from_disk_2(process_config, filename, out_queue, num_chunks=None):
+def samples_source_file(filename, N, num_chunks, wait_for_handling=True):
+    """
+    filename          -> file to read from
+    N                 -> from ProcessConfig.num_samples_to_process
+    num_chunks        -> how many chunks to read (or None for all)
+    wait_for_handling -> put None to queue at the end (to indicate end)
+                         and wait for all processing
+    """
     file_dtype = filename_to_dtype(filename)
 
-    samples_queue = asyncio.Queue()
+    async def _inner(samples_queue):
+        for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
+            await samples_queue.put(chunk)
 
-    try:
-        # task 1 - sample processor
-        sample_processor_task = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))
+            if num_chunks is not None and chunks_processed >= num_chunks:
+                break
 
-        # task 2 - put chunks from file to queue
-        chunk_putter = asyncio.create_task(
-            put_chunks_from_file_to_queue(
-                samples_queue, filename, file_dtype, process_config.num_samples_to_process, num_chunks
-            )
-        )
+        if wait_for_handling:
+            await samples_queue.put(None)  # Indicate that we are done with samples
+            await samples_queue.join()
 
-        start_time = time.time()
-        await asyncio.gather(sample_processor_task, chunk_putter)
-
-    except CarrierFrequencyNotFound:
-
-        print("Carrier frequency not found, interrupting sample processing...")
-        return
-
-    finally:
-        finish_time = time.time()
-        print(f" run time is {finish_time-start_time:.2f}")
-        del sample_processor_task
+    return _inner
 
 
-# def run_from_disk(process_config: ProcessConfig, filename: str):
-#     file_dtype = filename_to_dtype(filename)
+def samples_source_radio(reader: SampleReader, buffer: SampleBuffer, num_samples_to_process: int):
+    """
+    reader                  -> the radio
+    buffer                  -> where to put samples from the radio
+    num_samples_to_process  -> number of samples in one chunk
+    """
 
-#     print(f"Loading samples from {filename} with data type {file_dtype}")
-#     samples = np.fromfile(filename, dtype=file_dtype)
-#     print(f"{len(samples)} samples loaded")
+    async def _inner(samples_queue):
+        reader.buffer = buffer
 
-#     # Convert unsigned 8 bit samples to 32 bit floats and complex
-#     if file_dtype is np.uint8:
-#         iq = samples.astype(np.float32).view(np.complex64)
-#         iq /= 127.5
-#         iq -= 1 + 1j
-#         samples = iq.copy()
+        async with reader:
+            await reader.open_stream()
+            while True:
+                chunk = await buffer.get(num_samples_to_process)
+                await samples_queue.put(chunk)
 
-#     if file_dtype == np.complex128:
-#         samples = samples.astype(np.complex64)
-
-#     processor = SampleProcessor(process_config)
-
-#     # Organize input samples into chunks, resize handles padding the end with zeroes
-#     # Better would be to only read single chunks from the file
-#     chunk_len = processor.num_samples_to_process
-#     n_chunks = np.floor(samples.size / chunk_len).astype(int)
-#     samples.resize(n_chunks, chunk_len)
-
-#     start_time = time.time()
-
-#     for chunk in samples:
-#         processor.process(chunk)
-
-#     finish_time = time.time()
-#     print(f" run time is {finish_time-start_time:.2f}")
+    return _inner
 
 
-# async def run_main(sample_config: SampleConfig, process_config: ProcessConfig):
-#     reader = SampleReader(sample_config)
-#     processor = SampleProcessor(process_config)
-#     buffer = SampleBuffer(maxsize=processor.num_samples_to_process * 3)
-#     reader.buffer = buffer
-
-#     async with reader:
-#         await reader.open_stream()
-#         while True:
-#             samples = await buffer.get(processor.num_samples_to_process)
-#             # start_time = time.time()
-#             await asyncio.to_thread(processor.process, samples)
-#             # finish_time = time.time() - start_time
-#             # print(f" prcoessor took : {finish_time}")
-
-
-# this will just read from the queue and drop any data
-async def _out_queue_reader(out_queue: asyncio.Queue):
+# this will just read from the queue and discard any data
+async def _discard_results(out_queue: asyncio.Queue):
     while True:
         _ = await out_queue.get()
         out_queue.task_done()
 
 
-async def run_main_2(sample_config: SampleConfig, process_config: ProcessConfig):
-    reader = SampleReader(sample_config)
-    buffer = SampleBuffer(maxsize=process_config.num_samples_to_process * 3)
-    reader.buffer = buffer
+async def pipeline(process_config, task_samples_input, task_results=None):
+    """
+    process_config     -> ...
+    task_samples_input -> callable with one argument (samples_queue), must return async task
+    task_results       -> callable with one argument (out_queue), must return async task
+                          can be None (then all results are discarded)
+    """
 
     samples_queue = asyncio.Queue()
-
-    # for now, the result from process_2 will be stored here
     out_queue = asyncio.Queue()
 
-    sample_processor_task = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))  # noqa
-    null_data_reader = asyncio.create_task(_out_queue_reader(out_queue))  # noqa
+    if task_results is None:
+        task_results = _discard_results
 
-    async with reader:
-        await reader.open_stream()
-        while True:
-            samples = await buffer.get(process_config.num_samples_to_process)
-            await samples_queue.put(samples)
+    task_samples_source = asyncio.create_task(task_samples_input(samples_queue))
+    task_results = asyncio.create_task(task_results(out_queue))
 
-            # start_time = time.time()
-            # await asyncio.to_thread(processor.process, samples)
-            # finish_time = time.time() - start_time
-            # print(f" processor took : {finish_time}")
+    if process_config.carrier_freq is None:
+        logger.info("Carrier frequency not set - start scanning...")
+
+        try:
+            frequencies = await find_beep_frequencies(samples_queue, process_config, N=13)
+
+            if not frequencies:
+                logger.error("No frequency detected, exiting...")
+                raise CarrierFrequencyNotFound()
+            else:
+                logger.info(f"Frequencies detected: {frequencies} - end scanning...")
+
+                # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
+                logger.info(f"Picking first one: {frequencies[0]}")
+                process_config.carrier_freq = frequencies[0]
+
+        except CarrierFrequencyNotFound:
+            logger.exception("Carrier frequency not found, interrupting sample processing...")
+            return
+
+    # sample processor (for now only one)
+    task_sample_processor = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))
+    await task_sample_processor
+
+    task_samples_source.cancel()
+    task_results.cancel()
 
 
 if __name__ == "__main__":

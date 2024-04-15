@@ -1,14 +1,12 @@
 import asyncio
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from kiwitracker.common import ProcessConfig, SampleConfig
 from kiwitracker.sample_processor import find_beep_frequencies
-from kiwitracker.sample_reader import (chunk_numpy_file,
-                                       put_chunks_from_file_to_queue,
-                                       run_from_disk_2)
+from kiwitracker.sample_reader import (chunk_numpy_file, pipeline,
+                                       samples_source_file)
 
 
 @pytest.mark.asyncio
@@ -20,43 +18,38 @@ async def test_scan(request, process_config):
     process_config.sample_config.gain = 14.4
 
     samples_queue = asyncio.Queue()
-
-    chunks_task = asyncio.create_task(
-        put_chunks_from_file_to_queue(
-            samples_queue,
-            p,
-            np.dtype("int8"),
-            process_config.num_samples_to_process,
-            None,
-            wait_for_handling=False,
-        )
+    reader_task_fn = asyncio.create_task(
+        samples_source_file(p, process_config.num_samples_to_process, None)(samples_queue)
     )
 
     find_beep_freqs_task = asyncio.create_task(find_beep_frequencies(samples_queue, process_config, N=13))
 
-    result = await asyncio.gather(chunks_task, find_beep_freqs_task)
+    result = await find_beep_freqs_task
 
-    assert [160338981, 160708141] == result[1]
+    reader_task_fn.cancel()
+
+    assert [160338981, 160708141] == result
 
 
 @pytest.mark.asyncio
-async def test_process_sample(request, process_config):
-    p = Path(request.config.rootpath) / "data" / "rtl_ct.s8"
+async def test_process_sample(request, async_queue_to_list, process_config):
+    p = request.config.rootpath / "data" / "rtl_ct.s8"
 
-    # assert chunk_numpy_file() works correctly
+    # asserts chunk_numpy_file() works correctly
     num_chunks = sum(1 for _ in chunk_numpy_file(p, np.dtype("int8"), 250_000))
     assert num_chunks == 1967
 
-    # assert process_sample() works correctly
-    # we are reading first 50 chunks and process them
-    # the result is stored in `out_queue`
-    out_queue = asyncio.Queue()
-    await run_from_disk_2(process_config, p, out_queue, num_chunks=50)
-
     data = []
-    while not out_queue.empty():
-        data.append(await out_queue.get())
-        out_queue.task_done()
+
+    await pipeline(
+        process_config=process_config,
+        task_samples_input=samples_source_file(
+            p,
+            process_config.num_samples_to_process,
+            num_chunks=50,
+        ),
+        task_results=async_queue_to_list(data),
+    )
 
     bpms = [r.BPM for r in data]
     beep_durations = [r.BEEP_DURATION for r in data]
@@ -92,19 +85,29 @@ async def test_process_sample(request, process_config):
 
 
 @pytest.mark.asyncio
-async def test_multiple_4_s8(request):
-    p = Path(request.config.rootpath) / "data" / "test_multiple_4.s8"
+async def test_multiple_4_s8(request, async_queue_to_list):
+    sc = SampleConfig(
+        sample_rate=1_024_000,
+        center_freq=160_500_000,
+        gain=14.4,
+    )
 
-    sc = SampleConfig(sample_rate=1_024_000, center_freq=160_500_000, gain=14.4)
-    pc = ProcessConfig(sample_config=sc, carrier_freq=160_708_082, running_mode="disk")
-
-    out_queue = asyncio.Queue()
-    await run_from_disk_2(pc, p, out_queue)
+    pc = ProcessConfig(
+        sample_config=sc,
+        carrier_freq=160_708_082,
+        running_mode="disk",
+    )
 
     data = []
-    while not out_queue.empty():
-        data.append(await out_queue.get())
-        out_queue.task_done()
+    await pipeline(
+        process_config=pc,
+        task_samples_input=samples_source_file(
+            request.config.rootpath / "data" / "test_multiple_4.s8",
+            pc.num_samples_to_process,
+            num_chunks=None,
+        ),
+        task_results=async_queue_to_list(data),
+    )
 
     bpms = [r.BPM for r in data]
     beep_durations = [r.BEEP_DURATION for r in data]

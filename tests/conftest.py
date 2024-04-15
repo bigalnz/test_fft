@@ -48,3 +48,18 @@ def process_config(sample_config):
         num_samples_to_process=250000,
         running_mode="disk",
     )
+
+
+@pytest.fixture(scope="session")
+def async_queue_to_list():
+
+    def _inner1(lst):
+        async def _inner2(queue):
+            while True:
+                result = await queue.get()
+                lst.append(result)
+                queue.task_done()
+
+        return _inner2
+
+    return _inner1
