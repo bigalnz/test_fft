@@ -531,6 +531,15 @@ def main():
     # return
 
     if args.infile is not None:
+        import cProfile
+        import io
+        import pstats
+        from pstats import SortKey
+
+        pr = cProfile.Profile()
+
+        pr.enable()
+
         process_config.running_mode = "disk"
 
         out_queue = asyncio.Queue()
@@ -542,6 +551,14 @@ def main():
                 out_queue=out_queue,
             )
         )
+
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.CUMULATIVE
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+
     elif args.outfile is not None:
         print("Readonly mode not implemented (yet.)")
         return
