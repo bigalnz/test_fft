@@ -229,7 +229,9 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
 
         if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
-            logger.debug(f"{chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}")
+            logger.debug(
+                f"[process_sample({pc.carrier_freq=})] {chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}"
+            )
 
         if len(rising_edge_idx) > 0:
             rising_edge = rising_edge_idx[0]
@@ -324,11 +326,10 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
         latitude, longitude = pc.gps_module.get_current()
 
-        logger.debug(f"{rising_edge=} {falling_edge=}")
+        logger.debug(f"[process_sample({pc.carrier_freq=})] {rising_edge=} {falling_edge=}")
 
-        # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
         logger.info(
-            f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
+            f"[process_sample({pc.carrier_freq=})] BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
         )
 
         #########################################################################

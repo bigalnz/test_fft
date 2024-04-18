@@ -712,7 +712,32 @@ async def _discard_results(out_queue: asyncio.Queue):
         out_queue.task_done()
 
 
-async def pipeline(process_config, task_samples_input, task_results=None):
+async def scan_for_frequencies(samples_queue: asyncio.Queue, process_config: ProcessConfig) -> list[float]:
+
+    assert process_config.carrier_freq is None
+
+    try:
+        frequencies = await find_beep_frequencies(samples_queue, process_config, N=13)
+
+        if not frequencies:
+            logger.error("No frequency detected, exiting...")
+            raise CarrierFrequencyNotFound()
+        else:
+            logger.info(f"Frequencies detected: {frequencies} - end scanning...")
+
+        return frequencies
+
+        # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
+        # logger.info(f"Picking first one: {frequencies[0]}")
+        # process_config.carrier_freq = frequencies[0]
+
+    except CarrierFrequencyNotFound:
+        logger.exception("Carrier frequency not found, interrupting sample processing...")
+        raise
+
+
+# TODO: process config could be list (define carrier frequencies from command line)
+async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_samples_input, task_results=None):
     """
     process_config     -> ...
     task_samples_input -> callable with one argument (samples_queue), must return async task
@@ -721,40 +746,69 @@ async def pipeline(process_config, task_samples_input, task_results=None):
     """
 
     samples_queue = asyncio.Queue()
-    out_queue = asyncio.Queue()
+    task_samples_source = asyncio.create_task(task_samples_input(samples_queue))
 
     if task_results is None:
         task_results = _discard_results
 
-    task_samples_source = asyncio.create_task(task_samples_input(samples_queue))
-    task_results = asyncio.create_task(task_results(out_queue))
+    match process_config:
+        case list():
+            # list of fully defined ProcessConfigs (with carrier_freq defined from command line)
+            raise NotImplementedError("Multiple process_configs in pipeline not yet implemented.")
+        case ProcessConfig() if process_config.carrier_freq is None:
+            # carrier_freq is None - we should scan for frequencies
+            logger.info("Carrier frequency not set - start scanning...")
+            frequencies = await scan_for_frequencies(samples_queue, process_config)
 
-    if process_config.carrier_freq is None:
-        logger.info("Carrier frequency not set - start scanning...")
+            # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
+            logger.info(f"Picking first one: {frequencies[0]}")
+            process_config.carrier_freq = frequencies[0]
+            process_config = [process_config]
+        case ProcessConfig():
+            # fully defined ProcessConfig (with carrier_freq)
+            process_config = [process_config]
+        case _:
+            raise ValueError(f"Type of process_config {type(process_config)} not understood.")
 
-        try:
-            frequencies = await find_beep_frequencies(samples_queue, process_config, N=13)
+    process_queues, process_tasks, result_tasks = set(), set(), set()
+    for i, pc in enumerate(process_config, 1):
+        logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
+        out_queue = asyncio.Queue()
+        process_queue = asyncio.Queue()
 
-            if not frequencies:
-                logger.error("No frequency detected, exiting...")
-                raise CarrierFrequencyNotFound()
-            else:
-                logger.info(f"Frequencies detected: {frequencies} - end scanning...")
+        task_result = asyncio.create_task(task_results(out_queue))
+        task_sample_processor = asyncio.create_task(process_sample(pc, process_queue, out_queue))
 
-                # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
-                logger.info(f"Picking first one: {frequencies[0]}")
-                process_config.carrier_freq = frequencies[0]
+        process_queues.add(process_queue)
+        process_tasks.add(task_sample_processor)
+        result_tasks.add(task_result)
 
-        except CarrierFrequencyNotFound:
-            logger.exception("Carrier frequency not found, interrupting sample processing...")
-            return
+    while True:
+        sample = await samples_queue.get()
 
-    # sample processor (for now only one)
-    task_sample_processor = asyncio.create_task(process_sample(process_config, samples_queue, out_queue))
-    await task_sample_processor
+        # distribute the sample to all process queues:
+        for pq in process_queues:
+            pq.put_nowait(sample)
+
+        samples_queue.task_done()
+
+        if sample is None:
+            break
+
+    # wait for processing:
+    for pq in process_queues:
+        await pq.join()
+
+    await samples_queue.join()
+
+    # cancel all tasks:
+    for t in process_tasks:
+        t.cancel()
+
+    for t in result_tasks:
+        t.cancel()
 
     task_samples_source.cancel()
-    task_results.cancel()
 
 
 if __name__ == "__main__":
