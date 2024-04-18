@@ -14,7 +14,6 @@ from scipy import signal
 
 # from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import ProcessConfig, ProcessResult
-from kiwitracker.exceptions import CarrierFrequencyNotFound
 
 # from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
 

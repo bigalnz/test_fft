@@ -410,8 +410,6 @@ class SampleBuffer:
 
 
 def main():
-    setup_logging()
-
     p = argparse.ArgumentParser()
     p.add_argument(
         "-f",
@@ -484,6 +482,10 @@ def main():
         help="Enable bias tee",
     )
 
+    s_group.add_argument(
+        "-log", "--loglevel", default="warning", help="Provide logging level. Example --loglevel debug, default=warning"
+    )
+
     p_group = p.add_argument_group("Processing")
     p_group.add_argument(
         "--carrier",
@@ -497,8 +499,10 @@ def main():
 
     args = p.parse_args()
 
+    setup_logging(level=args.loglevel.upper())
+
     if args.scan and args.carrier is not None:
-        logger.error("--scan and --carrier cannot be provided simultaneously.")
+        print("--scan and --carrier cannot be provided simultaneously.")
         return
     elif not args.scan and args.carrier is None:
         args.carrier_freq = ProcessConfig.carrier_freq
@@ -751,6 +755,10 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
     if task_results is None:
         task_results = _discard_results
 
+    # what process config we have?
+    # - list of process configs
+    # - single process config with carrier_freq=None (should scan.)
+    # - single process config with defined carrier_freq
     match process_config:
         case list():
             # list of fully defined ProcessConfigs (with carrier_freq defined from command line)
@@ -770,6 +778,13 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
         case _:
             raise ValueError(f"Type of process_config {type(process_config)} not understood.")
 
+    # for each detected/defined frequency we create two tasks:
+    # - task for processing sample
+    # - task for handling processed sample (detected BPM.)
+    #
+    # for each `processing sample task` we create `process queue` and `out queue`
+    # so we can distribute samples from task_samples_source() to each `process queue`
+    # `processing sample task` will put detected BPMs to `out queue` for further handling.
     process_queues, process_tasks, result_tasks = set(), set(), set()
     for i, pc in enumerate(process_config, 1):
         logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
@@ -783,6 +798,7 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
         process_tasks.add(task_sample_processor)
         result_tasks.add(task_result)
 
+    # start reading samples and distrubute them to all process queues
     while True:
         sample = await samples_queue.get()
 
@@ -792,6 +808,8 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
 
         samples_queue.task_done()
 
+        # we received `None` from source (e.g. we finished reading from the file),
+        # so end all the processing
         if sample is None:
             break
 
