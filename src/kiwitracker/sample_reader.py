@@ -15,7 +15,8 @@ from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
-from kiwitracker.sample_processor import find_beep_frequencies, process_sample
+from kiwitracker.sample_processor import (chick_timer, find_beep_frequencies,
+                                          process_sample)
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
 
@@ -549,6 +550,7 @@ def main():
                     num_chunks=None,
                     wait_for_handling=True,
                 ),
+                task_results=chick_timer,
             )
         )
 
@@ -572,6 +574,7 @@ def main():
                     buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
                     num_samples_to_process=process_config.num_samples_to_process,
                 ),
+                task_results=chick_timer,
             )
         )
 
@@ -800,6 +803,8 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
 
     # start reading samples and distrubute them to all process queues
     while True:
+        await asyncio.sleep(0.0001)  # yield control to other tasks
+
         sample = await samples_queue.get()
 
         # distribute the sample to all process queues:

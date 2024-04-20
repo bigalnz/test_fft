@@ -85,7 +85,7 @@ def rising_falling_indices(samples: np.ndarray, unsmoothed_samples: np.ndarray) 
     """
 
     # Get a boolean array for all samples higher or lower than the threshold
-    threshold = np.median(samples) * 3  # go just above noise floor - use smoothed samples for beep detection
+    threshold = np.median(samples) * 2  # go just above noise floor - use smoothed samples for beep detection
 
     # can exit this chunk here early if nothing detected above threshold
     # if not True in samples >= threshold:
@@ -344,6 +344,64 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         falling_edge = 0
 
         samples_queue.task_done()
+
+
+async def chick_timer(queue: asyncio.Queue):
+
+    async def _get_normalized_bpm(valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)):
+        process_result = await queue.get()
+        normalized_BPM = min(valid_bpms, key=lambda k: abs(k - process_result.BPM))
+        queue.task_done()
+        return normalized_BPM
+
+    async def _wait_for_start(start_bpm=20.0):
+        while True:
+            bpm = await _get_normalized_bpm()
+
+            if bpm == start_bpm:
+                return
+
+    async def _count_beeps_till(end_bpm=16.0):
+        num_beeps = 0
+
+        while True:
+            bpm = await _get_normalized_bpm()
+
+            num_beeps += 1
+
+            if bpm == end_bpm:
+                return num_beeps
+
+    numbers_to_find = [
+        "days_since_change_of_state",
+        "days_since_hatch",
+        "days_since_desertion_alert",
+        "time_of_emergence",
+        "weeks_batt_life_left",
+        "activity_yesterday",
+        "activity_two_days_ago",
+        "mean_activity_last_four_days",
+    ]
+
+    while True:
+        out = {}
+        for n in numbers_to_find:
+            logger.debug(f"#### CT Processing for number [{n}] START ####")
+
+            await _wait_for_start(20.0)
+            logger.debug("#### Found Start BPM! ####")
+
+            first_digit = await _count_beeps_till(16.0)
+            logger.debug(f"#### Found First digit {first_digit=} ####")
+
+            second_digit = await _count_beeps_till(16.0)
+            logger.debug(f"#### Found Second digit {second_digit=} ####")
+
+            logger.debug(f"#### CT Processing for number [{n}={first_digit}{second_digit}] END ####")
+
+            out[n] = f"{first_digit}{second_digit}"
+
+        logger.info(f"Complete CT found! {out}")
 
 
 # class SampleProcessor:
