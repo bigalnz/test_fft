@@ -96,7 +96,7 @@ kiwitracker --help
 Which should display the following:
 
 ```bash
-usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER]
+usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER] [--no-use-gps]
 
 options:
   -h, --help            show this help message and exit
@@ -120,6 +120,8 @@ Sampling:
                         SDR center frequency (default: 160270968)
 
   -g GAIN, --gain GAIN  SDR gain (default: 7.7)
+
+  --no-use-gps          do not try to connect to GPS. Not supported on Windows.
 
 Processing:
   --carrier CARRIER     Carrier frequency to process (default: 160707760)
