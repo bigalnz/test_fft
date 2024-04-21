@@ -70,13 +70,13 @@ Validation:
  
  Maximum Values:
 
-    | Attribute | Max Fast Telemetry | Audible Telemetry |
-    |-----------|--------------------|-------------------|
-    |days_since_change_of_state  | 99 | 255 |
-    |days_since_hatch | 99 |255 | 
-    |days_since_desertion_alert | 99 | 255 | 
-    |time_of_emergence | N/A | 99 | 255 |
-    |weeks_batt_life_left | N/A | 52 |
-    |activity_yesterday | N/A | 144 |
-    |activity_two_days_ago | N/A |144 |
-    |mean_activity_last_four_days | N/A | 144 |
+| Attribute | Max Fast Telemetry | Audible Telemetry |
+|-----------|--------------------|-------------------|
+|days_since_change_of_state  | 99 | 255 |
+|days_since_hatch | 99 |255 | 
+|days_since_desertion_alert | 99 | 255 | 
+|time_of_emergence | N/A | 99 | 255 |
+|weeks_batt_life_left | N/A | 52 |
+|activity_yesterday | N/A | 144 |
+|activity_two_days_ago | N/A |144 |
+|mean_activity_last_four_days | N/A | 144 |
