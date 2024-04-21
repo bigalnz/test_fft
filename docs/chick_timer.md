@@ -67,6 +67,8 @@ date time start/finish and GPS etc.)
 Validation:
 
  - You can not have a 0 or a 1 (its impossible to have 0 beeps)
+ - Weeks of Battery Life left can only stay the same as previous read of that value or decrease
+ - Time of emergencey  - while maximum value is 99 (hours) nobody has ever seen more than 48 hours - the birds need to eat.
  
  Maximum Values:
 
@@ -75,8 +77,10 @@ Validation:
 |days_since_change_of_state  | 99 | 255 | 27 | 7 |
 |days_since_hatch | 99 |255 | 
 |days_since_desertion_alert | 99 | 255 | 
-|time_of_emergence | N/A | 99 | 255 |
+|time_of_emergence | N/A | 99 | 
 |weeks_batt_life_left | 52 | 52 |
 |activity_yesterday | 99 | 144 |
 |activity_two_days_ago | 99 |144 |
 |mean_activity_last_four_days | 99 | 144 |
+
+
