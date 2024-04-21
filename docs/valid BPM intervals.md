@@ -14,4 +14,19 @@ However the encoding of fast telemtry between beeps means that the interval betw
 
 | Pulse Delay (ms) | Encoded Value | 
 |------------------|---------------|
-| 0 | 0
+| 0 | 0 | 
+| 10 | Mortality |
+| 20 | 1 |
+| 30 | 2 |
+| 40 | Nesting |
+| 50 | 3 |
+| 60 | 4 |
+| 70 | Not Nesting |
+| 80 5 | 
+| 90 | 6 |
+| 100 | Hatch | 
+| 110 | 7 | 
+| 120 | 8 |
+| 130 | Deserting | 
+| 140 | 9 |
+
