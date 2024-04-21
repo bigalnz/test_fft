@@ -12,10 +12,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal
 
-# from kiwitracker.chicktimerstatusdecoder import ChickTimerStatusDecoder
 from kiwitracker.common import ProcessConfig, ProcessResult
-
-# from kiwitracker.fasttelemetrydecoder import FastTelemetryDecoder
+from kiwitracker.exceptions import ChickTimerProcessingError
 
 logger = logging.getLogger("KiwiTracker")
 
@@ -228,9 +226,7 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
 
         if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
-            logger.debug(
-                f"[process_sample({pc.carrier_freq=})] {chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}"
-            )
+            logger.debug(f"[{pc.carrier_freq}] {chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}")
 
         if len(rising_edge_idx) > 0:
             rising_edge = rising_edge_idx[0]
@@ -325,10 +321,10 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
         latitude, longitude = pc.gps_module.get_current()
 
-        logger.debug(f"[process_sample({pc.carrier_freq=})] {rising_edge=} {falling_edge=}")
+        # logger.debug(f"[{pc.carrier_freq}] {rising_edge=} {falling_edge=}")
 
         logger.info(
-            f"[process_sample({pc.carrier_freq=})] BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
+            f"[{pc.carrier_freq}] BPM: {BPM: >6.2f} | PWR: {DBFS or 0: >6.2f} dBFS | MAG: {CLIPPING: >6.3f} | BEEP_DURATION: {BEEP_DURATION: >6.4f}s | SNR: {SNR: >6.2f} | POS: {latitude} {longitude}"
         )
 
         #########################################################################
@@ -361,16 +357,35 @@ async def chick_timer(queue: asyncio.Queue):
             if bpm == start_bpm:
                 return
 
+    async def _wait_specific_num_of_beeps(num: int):
+        while num > 0:
+            _ = await queue.get()
+            queue.task_done()
+            num -= 1
+
     async def _count_beeps_till(end_bpm=16.0):
         num_beeps = 0
+        digit_bpm = None
 
         while True:
             bpm = await _get_normalized_bpm()
 
             num_beeps += 1
 
-            if bpm == end_bpm:
-                return num_beeps
+            if num_beeps > 16:
+                raise ChickTimerProcessingError(f"Number of detected beeps is high ({num_beeps=}).")
+
+            match bpm:
+                case x if digit_bpm is None:
+                    digit_bpm = bpm
+                case x if x == end_bpm:
+                    if num_beeps < 2:
+                        raise ChickTimerProcessingError(f"Number of detected beeps is low ({num_beeps=}).")
+                    return num_beeps
+                case _ if digit_bpm != bpm:
+                    raise ChickTimerProcessingError(
+                        f"Value of BPMs inside digit differs (expected={digit_bpm}/actual={bpm})."
+                    )
 
     numbers_to_find = [
         "days_since_change_of_state",
@@ -384,24 +399,27 @@ async def chick_timer(queue: asyncio.Queue):
     ]
 
     while True:
-        out = {}
-        for n in numbers_to_find:
-            logger.debug(f"#### CT Processing for number [{n}] START ####")
+        try:
+            out = {}
+            for n in numbers_to_find:
+                await _wait_for_start(20.0)
+                logger.debug(f"CT: Found Start BPM for [{n}]!")
 
-            await _wait_for_start(20.0)
-            logger.debug("#### Found Start BPM! ####")
+                first_digit = await _count_beeps_till(16.0)
+                logger.debug(f"CT: [{n}] Found First digit {first_digit=}")
 
-            first_digit = await _count_beeps_till(16.0)
-            logger.debug(f"#### Found First digit {first_digit=} ####")
+                second_digit = await _count_beeps_till(16.0)
+                logger.debug(f"CT: [{n}] Found Second digit {second_digit=}")
 
-            second_digit = await _count_beeps_till(16.0)
-            logger.debug(f"#### Found Second digit {second_digit=} ####")
+                logger.info(f"CT: Found {n}={first_digit}{second_digit}]")
 
-            logger.debug(f"#### CT Processing for number [{n}={first_digit}{second_digit}] END ####")
+                out[n] = f"{first_digit}{second_digit}"
 
-            out[n] = f"{first_digit}{second_digit}"
-
-        logger.info(f"Complete CT found! {out}")
+            logger.info(f"CT: Complete CT found! {out}")
+        except ChickTimerProcessingError as err:
+            logger.exception(err)
+            logger.info("CT: Skiping next 100 beeps!")
+            await _wait_specific_num_of_beeps(100)
 
 
 # class SampleProcessor:
