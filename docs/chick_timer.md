@@ -70,9 +70,9 @@ Validation:
  
  Maximum Values:
 
-| Attribute | Max Fast Telemetry | Audible Telemetry |
-|-----------|--------------------|-------------------|
-|days_since_change_of_state  | 99 | 255 |
+| Attribute | Max Fast Telemetry | Audible Telemetry | Max Beeps Pair 1 | Max Beeps Pair 2 |
+|-----------|--------------------|-------------------|------------------|------------------|
+|days_since_change_of_state  | 99 | 255 | 27 | 7 |
 |days_since_hatch | 99 |255 | 
 |days_since_desertion_alert | 99 | 255 | 
 |time_of_emergence | N/A | 99 | 255 |
