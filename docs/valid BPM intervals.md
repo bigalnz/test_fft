@@ -30,3 +30,4 @@ However the encoding of fast telemetry between beeps means that the interval bet
 | 130 | Deserting | 
 | 140 | 9 | 67.41 | 43.16 | 31.74 | 28.03 | 19.1082 | 15.42 |
 
+This means that the maximum value a 80 BPM can be is 80, while the minimum value for a 80 BPM is 67.41 BPM (and which would mean fast telemetry has transmitted a "9")
