@@ -67,4 +67,16 @@ date time start/finish and GPS etc.)
 Validation:
 
  - You can not have a 0 or a 1 (its impossible to have 0 beeps)
- - There will be a limit to how big a single number of beeps in a pair can be - for now lets say its 20
+ 
+ Maximum Values:
+
+    | Attribute | Max Fast Telemetry | Audible Telemetry |
+    |-----------|--------------------|-------------------|
+    |days_since_change_of_state  | 99 | 255 |
+    |days_since_hatch | 99 |255 | 
+    |days_since_desertion_alert | 99 | 255 | 
+    |time_of_emergence | N/A | 99 | 255 |
+    |weeks_batt_life_left | N/A | 52 |
+    |activity_yesterday | N/A | 144 |
+    |activity_two_days_ago | N/A |144 |
+    |mean_activity_last_four_days | N/A | 144 |
