@@ -125,4 +125,7 @@ Sampling:
 
 Processing:
   --carrier CARRIER     Carrier frequency to process (default: 160707760)
+  --scan                Scan first 3 seconds to detect frequencies
+  Note that --carrier and --scan are mutually exclusive - provide on or the other.
+
 ```
