@@ -14,7 +14,7 @@ However the encoding of fast telemtry between beeps means that the interval betw
 
 | Pulse Delay (ms) | Encoded Value | 80 BPM | 48 BPM | 34.28 BPM | 30 BPM | 20 BPM | 16 BPM |
 |------------------|---------------|--------|--------|-----------|--------|--------|--------|
-| 0 | 0 | 
+| 0 | 0 | 80 |
 | 10 | Mortality |
 | 20 | 1 |
 | 30 | 2 |
@@ -28,5 +28,5 @@ However the encoding of fast telemtry between beeps means that the interval betw
 | 110 | 7 | 
 | 120 | 8 |
 | 130 | Deserting | 
-| 140 | 9 |
+| 140 | 9 | 67.41 | 43.16 | 31.74 | 28.03 | 19.1082 | 15.42 |
 
