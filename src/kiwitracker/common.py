@@ -86,6 +86,7 @@ class ProcessResult:
     """
 
     date: datetime.datetime
+    channel: int
     BPM: float
     DBFS: float
     CLIPPING: float

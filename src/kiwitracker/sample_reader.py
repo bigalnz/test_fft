@@ -10,8 +10,11 @@ from typing import TYPE_CHECKING, Self, TypeAlias
 
 import numpy as np
 import rtlsdr
+from sqlalchemy.orm import Session
 
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
+from kiwitracker.db.engine import get_sqlalchemy_engine
+from kiwitracker.db.models import BPM
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
@@ -550,7 +553,7 @@ def main():
                     num_chunks=None,
                     wait_for_handling=True,
                 ),
-                task_results=chick_timer,
+                task_results=results_pipeline(),
             )
         )
 
@@ -574,7 +577,7 @@ def main():
                     buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
                     num_samples_to_process=process_config.num_samples_to_process,
                 ),
-                task_results=chick_timer,
+                task_results=results_pipeline(),
             )
         )
 
@@ -598,6 +601,54 @@ def main():
     #     )
     # else:
     #     asyncio.run(run_main(sample_config=sample_config, process_config=process_config))
+
+
+def results_pipeline():
+
+    # We need:
+    # 1. Read the processed BPM from queue
+    # 2. Write the processed BPM to database
+    # 3. Put processed BPM down to chick_timer()
+    # 4. (TODO) Save the CT (even incomplete, in case of error in BPMs) to DB
+
+    async def _inner(queue: asyncio.Queue):
+        ct_queue = asyncio.Queue()
+        chick_timer_task = asyncio.create_task(chick_timer(ct_queue))
+
+        with Session(get_sqlalchemy_engine()) as db_session:
+            while True:
+                result = await queue.get()
+
+                # write the result (BPM) to database:
+                bpm = BPM(
+                    dt=result.date,
+                    channel=result.channel,
+                    bpm=result.BPM,
+                    dbfs=result.DBFS,
+                    clipping=result.CLIPPING,
+                    duration=result.BEEP_DURATION,
+                    snr=result.SNR,
+                    lat=result.latitude,
+                    lon=result.longitude,
+                )
+
+                db_session.add(bpm)
+
+                db_session.commit()
+                queue.task_done()
+
+                # put the result to chick_timer()
+                await ct_queue.put(result)
+
+        chick_timer_task.cancel()
+
+    return _inner
+
+
+async def _discard_results(out_queue: asyncio.Queue):
+    while True:
+        _ = await out_queue.get()
+        out_queue.task_done()
 
 
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):

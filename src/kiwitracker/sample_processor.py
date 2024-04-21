@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import math
 import statistics
 from datetime import datetime
 from functools import lru_cache
@@ -36,6 +37,11 @@ def phasor(num_samples_to_process: int, sample_rate: int, freq_offset: int) -> n
 @lru_cache(maxsize=5)
 def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
     return np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
+
+
+def channel(carrier_freq: float) -> int:
+    """Channel Number from Freq"""
+    return math.floor((carrier_freq - 160.11e6) / 0.01e6)
 
 
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
@@ -193,6 +199,8 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
     assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
 
+    ch = channel(pc.carrier_freq)
+
     rising_edge = 0
     falling_edge = 0
     stateful_index = 0
@@ -205,6 +213,8 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
     distance_to_sample_end = None
     first_half_of_sliced_beep = 0
+
+    logger.info(f"Processing for channel={ch}/carrier_freq={pc.carrier_freq} started...")
 
     while True:
         samples = await samples_queue.get()
@@ -226,7 +236,9 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
 
         if len(rising_edge_idx) > 0 or len(falling_edge_idx) > 0:
-            logger.debug(f"[{pc.carrier_freq}] {chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}")
+            logger.debug(
+                f"[{ch}/{pc.carrier_freq}] {chunk_count=} {rising_edge_idx=} {falling_edge_idx=} {beep_slice=}"
+            )
 
         if len(rising_edge_idx) > 0:
             rising_edge = rising_edge_idx[0]
@@ -324,13 +336,12 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         # logger.debug(f"[{pc.carrier_freq}] {rising_edge=} {falling_edge=}")
 
         logger.info(
-            f"[{pc.carrier_freq}] BPM: {BPM: >6.2f} | PWR: {DBFS or 0: >6.2f} dBFS | MAG: {CLIPPING: >6.3f} | BEEP_DURATION: {BEEP_DURATION: >6.4f}s | SNR: {SNR: >6.2f} | POS: {latitude} {longitude}"
+            f"[{ch}/{pc.carrier_freq}] BPM: {BPM: >6.2f} | PWR: {DBFS or 0: >6.2f} dBFS | MAG: {CLIPPING: >6.3f} | BEEP_DURATION: {BEEP_DURATION: >6.4f}s | SNR: {SNR: >6.2f} | POS: {latitude} {longitude}"
         )
 
         #########################################################################
 
-        res = ProcessResult(datetime.now(), BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
-        logger.debug(res)
+        res = ProcessResult(datetime.now(), ch, BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
 
         await out_queue.put(res)
 

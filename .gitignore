@@ -100,3 +100,6 @@ temp/
 
 # sublime text editor files
 *.sublime-*
+
+# sqlite database files
+*.db
