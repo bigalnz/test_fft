@@ -12,8 +12,8 @@ The valid nominal pulse intervals expressed in milliseconds (ms) and in BPM (bee
 
 However the encoding of fast telemtry between beeps means that the interval between beeps can vary. The fast telemetry pulse delays are:
 
-| Pulse Delay (ms) | Encoded Value | 
-|------------------|---------------|
+| Pulse Delay (ms) | Encoded Value | 80 BPM | 48 BPM | 34.28 BPM | 30 BPM | 20 BPM | 16 BPM |
+|------------------|---------------|--------|--------|-----------|--------|--------|--------|
 | 0 | 0 | 
 | 10 | Mortality |
 | 20 | 1 |
