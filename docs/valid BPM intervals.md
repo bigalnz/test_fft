@@ -22,7 +22,7 @@ However the encoding of fast telemtry between beeps means that the interval betw
 | 50 | 3 |
 | 60 | 4 |
 | 70 | Not Nesting |
-| 80 5 | 
+| 80 | 5 | 
 | 90 | 6 |
 | 100 | Hatch | 
 | 110 | 7 | 
