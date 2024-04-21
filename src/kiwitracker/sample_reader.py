@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.db.engine import get_sqlalchemy_engine
-from kiwitracker.db.models import BPM
+from kiwitracker.db.models import BPM, ChickTimerResult
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
@@ -609,13 +609,49 @@ def results_pipeline():
     # 1. Read the processed BPM from queue
     # 2. Write the processed BPM to database
     # 3. Put processed BPM down to chick_timer()
-    # 4. (TODO) Save the CT (even incomplete, in case of error in BPMs) to DB
+    # 4. Save the CT (even incomplete, in case of error in BPMs) to DB
 
-    async def _inner(queue: asyncio.Queue):
-        ct_queue = asyncio.Queue()
-        chick_timer_task = asyncio.create_task(chick_timer(ct_queue))
+    async def _write_ct_result_to_db(queue: asyncio.Queue, db_session: Session):
+        while True:
+            r = await queue.get()
+
+            ctr = ChickTimerResult(
+                channel=r.channel,
+                carrier_freq=r.carrier_freq,
+                decoding_success=r.decoding_success,
+                start_dt=r.start_dt,
+                end_dt=r.end_dt,
+                snr_min=r.snr_min,
+                snr_max=r.snr_max,
+                snr_mean=r.snr_mean,
+                dbfs_min=r.dbfs_min,
+                dbfs_max=r.dbfs_max,
+                dbfs_mean=r.dbfs_mean,
+                lat=r.lat,
+                lon=r.lon,
+                days_since_change_of_state=r.days_since_change_of_state,
+                days_since_hatch=r.days_since_hatch,
+                days_since_desertion_alert=r.days_since_desertion_alert,
+                time_of_emergence=r.time_of_emergence,
+                weeks_batt_life_left=r.weeks_batt_life_left,
+                activity_yesterday=r.activity_yesterday,
+                activity_two_days_ago=r.activity_two_days_ago,
+                mean_activity_last_four_days=r.mean_activity_last_four_days,
+            )
+
+            db_session.add(ctr)
+            db_session.commit()
+
+            queue.task_done()
+
+    async def _inner(process_config: ProcessConfig, queue: asyncio.Queue):
+        ct_inp_queue, ct_out_queue = asyncio.Queue(), asyncio.Queue()
 
         with Session(get_sqlalchemy_engine()) as db_session:
+
+            chick_timer_task = asyncio.create_task(chick_timer(process_config, ct_inp_queue, ct_out_queue))
+            ct_to_db_task = asyncio.create_task(_write_ct_result_to_db(ct_out_queue, db_session))
+
             while True:
                 result = await queue.get()
 
@@ -638,17 +674,17 @@ def results_pipeline():
                 queue.task_done()
 
                 # put the result to chick_timer()
-                await ct_queue.put(result)
+                await ct_inp_queue.put(result)
 
-        chick_timer_task.cancel()
+                # chick_timer() will process the BPMs and put CT results to `ct_out_queue`
+
+            chick_timer_task.cancel()
+            ct_to_db_task.cancel()
+
+        await ct_inp_queue.join()
+        await ct_out_queue.join()
 
     return _inner
-
-
-async def _discard_results(out_queue: asyncio.Queue):
-    while True:
-        _ = await out_queue.get()
-        out_queue.task_done()
 
 
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
@@ -764,7 +800,7 @@ def samples_source_radio(reader: SampleReader, buffer: SampleBuffer, num_samples
 
 
 # this will just read from the queue and discard any data
-async def _discard_results(out_queue: asyncio.Queue):
+async def _discard_results(process_config: ProcessConfig, out_queue: asyncio.Queue):
     while True:
         _ = await out_queue.get()
         out_queue.task_done()
@@ -784,10 +820,6 @@ async def scan_for_frequencies(samples_queue: asyncio.Queue, process_config: Pro
             logger.info(f"Frequencies detected: {frequencies} - end scanning...")
 
         return frequencies
-
-        # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
-        # logger.info(f"Picking first one: {frequencies[0]}")
-        # process_config.carrier_freq = frequencies[0]
 
     except CarrierFrequencyNotFound:
         logger.exception("Carrier frequency not found, interrupting sample processing...")
@@ -845,7 +877,7 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
         out_queue = asyncio.Queue()
         process_queue = asyncio.Queue()
 
-        task_result = asyncio.create_task(task_results(out_queue))
+        task_result = asyncio.create_task(task_results(pc, out_queue))
         task_sample_processor = asyncio.create_task(process_sample(pc, process_queue, out_queue))
 
         process_queues.add(process_queue)

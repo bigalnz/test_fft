@@ -13,7 +13,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal
 
-from kiwitracker.common import ProcessConfig, ProcessResult
+from kiwitracker.common import CTResult, ProcessConfig, ProcessResult
 from kiwitracker.exceptions import ChickTimerProcessingError
 
 logger = logging.getLogger("KiwiTracker")
@@ -353,49 +353,66 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
         samples_queue.task_done()
 
 
-async def chick_timer(queue: asyncio.Queue):
+async def chick_timer(
+    pc: ProcessConfig,
+    queue: asyncio.Queue,
+    out_queue: asyncio.Queue,
+):
 
-    async def _get_normalized_bpm(valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)):
+    assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
+
+    async def _get_normalized_bpm(valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> tuple[float, ProcessResult]:
         process_result = await queue.get()
         normalized_BPM = min(valid_bpms, key=lambda k: abs(k - process_result.BPM))
         queue.task_done()
-        return normalized_BPM
+        return normalized_BPM, process_result
 
-    async def _wait_for_start(start_bpm=20.0):
+    async def _wait_for_start(start_bpm: float, snrs: list, dbfs: list) -> None:
         while True:
-            bpm = await _get_normalized_bpm()
+            normalized_bpm, res = await _get_normalized_bpm()
 
-            if bpm == start_bpm:
+            if normalized_bpm == start_bpm:
+                snrs.append(res.SNR)
+                dbfs.append(res.DBFS)
                 return
 
-    async def _wait_specific_num_of_beeps(num: int):
+    async def _wait_specific_num_of_beeps(num: int) -> None:
         while num > 0:
             _ = await queue.get()
             queue.task_done()
             num -= 1
 
-    async def _count_beeps_till(end_bpm=16.0):
+    async def _count_beeps_till(end_bpm: float, snrs: list, dbfs: list) -> int:
         num_beeps = 0
         digit_bpm = None
 
         while True:
-            bpm = await _get_normalized_bpm()
+            normalized_bpm, res = await _get_normalized_bpm()
 
             num_beeps += 1
 
             if num_beeps > 16:
                 raise ChickTimerProcessingError(f"Number of detected beeps is high ({num_beeps=}).")
 
-            match bpm:
+            match normalized_bpm:
                 case x if digit_bpm is None:
-                    digit_bpm = bpm
+                    digit_bpm = normalized_bpm
+                    snrs.append(res.SNR)
+                    dbfs.append(res.DBFS)
+
                 case x if x == end_bpm:
                     if num_beeps < 2:
                         raise ChickTimerProcessingError(f"Number of detected beeps is low ({num_beeps=}).")
+
+                    snrs.append(res.SNR)
+                    dbfs.append(res.DBFS)
+
+                    # we found `end_bpm` so end processing here
                     return num_beeps
-                case _ if digit_bpm != bpm:
+
+                case _ if digit_bpm != normalized_bpm:
                     raise ChickTimerProcessingError(
-                        f"Value of BPMs inside digit differs (expected={digit_bpm}/actual={bpm})."
+                        f"Value of BPMs inside digit differs (expected={digit_bpm}/actual={normalized_bpm})."
                     )
 
     numbers_to_find = [
@@ -409,278 +426,72 @@ async def chick_timer(queue: asyncio.Queue):
         "mean_activity_last_four_days",
     ]
 
+    cf = pc.carrier_freq
+    ch = channel(cf)
+
     while True:
+        snrs, dbfs = [], []
+        out = dict.fromkeys(numbers_to_find)
+        decoding_success = False
+        start_dt = None
+
         try:
-            out = {}
+
             for n in numbers_to_find:
-                await _wait_for_start(20.0)
+                await _wait_for_start(20.0, snrs, dbfs)
+
+                if start_dt is None:
+                    start_dt = datetime.now()
+
                 logger.debug(f"CT: Found Start BPM for [{n}]!")
 
-                first_digit = await _count_beeps_till(16.0)
+                first_digit = await _count_beeps_till(16.0, snrs, dbfs)
                 logger.debug(f"CT: [{n}] Found First digit {first_digit=}")
 
-                second_digit = await _count_beeps_till(16.0)
+                second_digit = await _count_beeps_till(16.0, snrs, dbfs)
                 logger.debug(f"CT: [{n}] Found Second digit {second_digit=}")
 
                 logger.info(f"CT: Found {n}={first_digit}{second_digit}]")
 
                 out[n] = f"{first_digit}{second_digit}"
 
+            decoding_success = True
             logger.info(f"CT: Complete CT found! {out}")
         except ChickTimerProcessingError as err:
             logger.exception(err)
-            logger.info("CT: Skiping next 100 beeps!")
+
+        end_dt = datetime.now()
+
+        # snrs, dbfs contain at least one value (from _wait_for_start())
+        snr_min = min(snrs)
+        snr_max = max(snrs)
+        snr_mean = statistics.mean(snrs)
+
+        dbfs_min = min(dbfs)
+        dbfs_max = max(dbfs)
+        dbfs_mean = statistics.mean(dbfs)
+
+        lat, lon = pc.gps_module.get_current()
+
+        r = CTResult(
+            channel=ch,
+            carrier_freq=cf,
+            decoding_success=decoding_success,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            snr_min=snr_min,
+            snr_max=snr_max,
+            snr_mean=snr_mean,
+            dbfs_min=dbfs_min,
+            dbfs_max=dbfs_max,
+            dbfs_mean=dbfs_mean,
+            lat=lat,
+            lon=lon,
+            **out,
+        )
+
+        await out_queue.put(r)
+
+        if not decoding_success:
+            logger.info("CT: Skiping next 100 beeps due to failed decoding!")
             await _wait_specific_num_of_beeps(100)
-
-
-# class SampleProcessor:
-#     config: ProcessConfig
-#     ct_state: bool
-#     snrlist: list
-#     dbfslist: list
-
-#     def __init__(self, config: ProcessConfig) -> None:
-#         self.config = config
-
-#         self.sample_checker = 0
-#         # create logger
-#         # self.logger = logging.getLogger("KiwiTracker")
-#         # self.beep_idx = 0
-
-#         self.test_samp = np.array(0)
-#         self.save_flag = False
-#         self.i = 0
-#         SNR = 0.0
-#         DBFS = 0.0
-#         self.valid_intervals = [250, 750, 1250, 1750, 2000, 3000, 3750]
-#         self.valid_BPMs = [60 / (interval / 1000) for interval in self.valid_intervals]
-#         self.decoder = ChickTimerStatusDecoder()
-#         self.fast_telemetry_decoder = FastTelemetryDecoder()
-
-#         self.ct_state = False
-#         self.snrlist = []
-#         self.dbfslist = []
-
-# async def process_2(self, pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
-#     await process_sample(pc, samples_queue, out_queue)
-
-# while True:
-#     data = await samples_queue.get()
-#     print(f"Received sample: {data.size}")
-
-#     samples_queue.task_done()
-
-# def process(self, samples: SamplesT):
-
-#     if self.freq_offset == 0:
-#         self.find_beep_freq(samples)
-
-#     if self.freq_offset == 0:
-#         return
-
-#     # record this file in the field - for testing log with IQ values
-#     # self.f.write(samples.astype(np.complex128))
-
-#     # **************************************************
-#     # Use this blockto save to file without pickle issue
-#     # **************************************************
-#     """if (self.stateful_index < 150000 and not self.save_flag):
-#         self.test_samp = np.append(self.test_samp, samples)
-#         #print(len(self.test_samp))
-#     elif(self.stateful_index > 150000 and not self.save_flag):
-#         #self.f2.write(self.test_samp.astype(np.complex128).tobytes, allow_pickle=False)
-#         #print(len(self.test_samp))
-#         np.save(self.f2, self.test_samp, allow_pickle=False)
-#         print("********* file saved ****************")
-#         self.save_flag = True"""
-
-#     t = self.time_array
-#     samples = samples * self.phasor
-#     # next two lines are band pass filter?
-#     h = self.fir
-#     samples = signal.convolve(samples, h, "same")
-#     # decimation
-#     # recalculation of sample rate due to decimation
-#     sample_rate = self.sample_rate / 100
-
-#     # record this file in the field - for testing log with IQ values
-#     # self.f.write(samples.astype(np.complex128))
-#     samples = samples[::100]
-#     samples = np.abs(samples)
-#     # smoothing
-#     samples = signal.convolve(samples, [1] * 10, "same") / 189
-
-#     # for testing - log to file
-#     # self.f.write(samples.astype(np.float32).tobytes())
-
-#     # Get a boolean array for all samples higher or lower than the threshold
-#     self.threshold = np.median(samples) * 3  # go just above noise floor
-#     low_samples = samples < self.threshold
-#     high_samples = samples >= self.threshold
-
-#     # Compute the rising edge and falling edges by comparing the current value to the next with
-#     # the boolean operator & (if both are true the result is true) and converting this to an index
-#     # into the current array
-#     rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-#     falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
-
-#     if len(rising_edge_idx) > 0:
-#         # print(f"len rising edges idx {len(rising_edge_idx)}")
-#         self.rising_edge = rising_edge_idx[0]
-
-#     if len(falling_edge_idx) > 0:
-#         self.falling_edge = falling_edge_idx[0]
-
-#     # If no rising or falling edges detected - exit early increment counter and move on
-#     if len(rising_edge_idx) == 0 and len(falling_edge_idx) == 0:
-#         self.stateful_index += samples.size
-#         return
-
-#     # If on FIRST rising edge - record edge and increment samples counter then exit early
-#     if len(rising_edge_idx) == 1 and self.stateful_rising_edge == 0:
-#         # print("*** exit early *** ")
-#         self.stateful_rising_edge = rising_edge_idx[0]
-#         self.stateful_index += samples.size  # + 9
-#         return
-
-#     # Detects if a beep was sliced by end of chunk
-#     # Grabs the samples from rising edge of end of samples and passes them to next iteration using samples_between
-#     if len(rising_edge_idx) == 1 and len(falling_edge_idx) == 0:
-#         self.beep_idx = (
-#             rising_edge_idx[0] + self.stateful_index
-#         )  # gives you the index of the beep using running total
-#         self.beep_slice = True
-#         self.distance_to_sample_end = (
-#             len(samples) - rising_edge_idx[0]
-#         )  # gives you the distance from the end of samples chunk
-#         self.stateful_index += samples.size  # + 14
-#         self.first_half_of_sliced_beep = samples[rising_edge_idx[0] :]
-#         # print("beep slice condition ln 229 is true - calculating BPM")
-#         return
-
-#     # only run these lines if not on a self.beep_slice
-#     # not on a beep slice, but missing either a rising or falling edge
-#     # is this ever true?
-#     if not (self.beep_slice):
-#         if len(rising_edge_idx) == 0 or len(falling_edge_idx) == 0:
-#             self.stateful_index += samples.size  # + 9
-#             return
-
-#         if rising_edge_idx[0] > falling_edge_idx[0]:
-#             falling_edge_idx = falling_edge_idx[1:]
-
-#         # Remove stray rising edge at the end
-#         if rising_edge_idx[-1] > falling_edge_idx[-1]:
-#             rising_edge_idx = rising_edge_idx[:-1]
-
-#     # BPM CALCUATIONS
-#     if self.beep_slice:
-#         samples_between = (self.stateful_index - self.distance_to_sample_end) - self.stateful_rising_edge
-#         time_between = 1 / sample_rate * (samples_between)
-#         BPM = 60 / time_between
-#         self.stateful_rising_edge = self.stateful_index - self.distance_to_sample_end
-#     else:
-#         samples_between = (rising_edge_idx[0] + self.stateful_index) - self.stateful_rising_edge
-#         self.beep_idx = rising_edge_idx[0] + self.stateful_index
-#         time_between = 1 / sample_rate * (samples_between)
-#         BPM = 60 / time_between
-#         self.stateful_rising_edge = self.stateful_index + rising_edge_idx[0]
-
-#     # GET HIGH AND LOW SAMPLES IN THERE OWN ARRAYS FOR CALC ON SNR, DBFS, CLIPPING
-#     if self.beep_slice:
-#         high_samples = np.concatenate((self.first_half_of_sliced_beep, samples[: self.falling_edge]))
-#         low_samples = samples[self.falling_edge :]
-#     else:
-#         high_samples = samples[self.rising_edge : self.falling_edge]
-#         low_samples = np.concatenate((samples[: self.rising_edge], samples[self.falling_edge :]))
-
-#     SNR = snr(high_samples, low_samples)
-#     DBFS = dBFS(high_samples)
-#     CLIPPING = clipping(high_samples)
-
-#     # BEEP DURATION
-#     if self.beep_slice:
-#         if len(falling_edge_idx) != 0:
-#             BEEP_DURATION = (falling_edge_idx[0] + self.distance_to_sample_end) / sample_rate
-#             # self.beep_slice = False
-#         else:
-#             BEEP_DURATION = 0
-#             # print(f"setting beep slice false on ln 273")
-#             # self.beep_slice = False
-#     else:
-#         BEEP_DURATION = (falling_edge_idx[0] - rising_edge_idx[0]) / sample_rate
-
-#     # GET GPS INFO FROM GPSD
-#     if self.config.running_mode == "normal":
-#         packet = gpsd.get_current()
-#         latitude = packet.lat
-#         longitude = packet.lon
-#     else:
-#         # use a default value for now
-#         latitude = -36.8807
-#         longitude = 174.924
-
-#     # print(f"  DATE : {datetime.now()} | BPM : {BPM: 5.2f} |  SNR : {SNR: 5.2f}  | BEEP_DURATION : {BEEP_DURATION: 5.4f} sec | POS : {latitude} {longitude}")
-#     self.logger.info(
-#         f" BPM : {BPM: 5.2f} | PWR : {DBFS or 0:5.2f} dBFS | MAG : {CLIPPING: 5.3f} | BEEP_DURATION : {BEEP_DURATION: 5.4f}s | SNR : {SNR: 5.2f} | POS : {latitude} {longitude}"
-#     )
-
-#     self.fast_telemetry_decoder.send(BPM)
-
-#     # Send normalized BPMs to ChickTImerStatusDecoder
-#     ChickTimerStatus = self.decoder.current_state
-#     normalized_BPMs = min(self.valid_BPMs, key=lambda x: abs(x - BPM))
-#     self.decoder.send(normalized_BPMs)
-
-#     # Check for CT start by looking at change of state
-#     if ChickTimerStatus is self.decoder.background and self.decoder.current_state is self.decoder.tens_digit:
-#         print(" **** CT START *****")
-#         self.decoder.ct.start_date_time = datetime.now()
-#         self.ct_state = True
-#     # self.logger.info(f" Normalised BP : {normalized_BPMs} Input BPM : {BPM: 5.2f} current decoder state :{self.decoder.current_state}" )
-
-#     if self.ct_state:
-#         self.snrlist.append(SNR)
-#         self.dbfslist.append(DBFS)
-
-#     if normalized_BPMs == 20:
-#         print(self.decoder.ct)
-
-#     # Check for CT end by looking at change of values
-#     if ChickTimerStatus is self.decoder.ones_digit and self.decoder.current_state is self.decoder.background:
-#         print(" **** CT FINISH *****")
-#         self.decoder.ct.lat = latitude
-#         self.decoder.ct.lon = longitude
-#         self.decoder.ct.finish_date_time = datetime.now()
-#         self.decoder.ct.carrier_freq = self.carrier_freq
-#         self.decoder.ct.channel = self.channel
-#         print(self.snrlist)
-#         print(min(self.snrlist))
-#         self.decoder.ct.snr.min = round(min(self.snrlist), 2)
-#         self.decoder.ct.snr.max = round(max(self.snrlist), 2)
-#         self.decoder.ct.snr.mean = round(statistics.mean(self.snrlist), 2)
-#         self.decoder.ct.dbfs.min = round(min(self.dbfslist), 2)
-#         self.decoder.ct.dbfs.max = round(max(self.dbfslist), 2)
-#         self.decoder.ct.dbfs.mean = round(statistics.mean(self.dbfslist), 2)
-#         print(f" This is the new ct : {self.decoder.ct.toJSON()}")
-#         # send to db or whatever here
-#         # reset everything
-#         self.decoder.ct.__init__()
-#         self.decoder.ct.status.__init__(0, 0, 0, 0, 0, 0, 0, 0)
-#         self.dbfslist.clear()
-#         self.snrlist.clear()
-#         self.ct_state = False
-
-#     # Send to Old Finite State Machine
-#     # self.bsm.process_input(BPM, SNR, DBFS, latitude, longitude)
-
-#     # increment sample count
-#     self.beep_slice = False
-#     self.stateful_index += samples.size  # + 14
-#     self.rising_edge = 0
-#     self.falling_edge = 0
-
-#     # reset these?
-#     # high_samples
-#     # low_samples
-#     # low_samples

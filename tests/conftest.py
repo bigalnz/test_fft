@@ -54,7 +54,7 @@ def process_config(sample_config):
 def async_queue_to_list():
 
     def _inner1(lst):
-        async def _inner2(queue):
+        async def _inner2(process_config, queue):
             while True:
                 result = await queue.get()
                 lst.append(result)

@@ -1,5 +1,5 @@
-from sqlalchemy import Column, DateTime, Float, Integer
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 
 Base = declarative_base()
@@ -20,3 +20,38 @@ class BPM(Base):
     snr = Column(Float, nullable=False)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
+
+
+class ChickTimerResult(Base):
+
+    __tablename__ = "chick_timer"
+
+    cid = Column(Integer, primary_key=True, autoincrement=True)
+
+    channel = Column(Integer, nullable=False)
+    carrier_freq = Column(Float, nullable=False)
+
+    decoding_success = Column(Boolean, default=False, nullable=False)
+
+    start_dt = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    end_dt = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    snr_min = Column(Float, nullable=False)
+    snr_max = Column(Float, nullable=False)
+    snr_mean = Column(Float, nullable=False)
+
+    dbfs_min = Column(Float, nullable=False)
+    dbfs_max = Column(Float, nullable=False)
+    dbfs_mean = Column(Float, nullable=False)
+
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
+
+    days_since_change_of_state = Column(Integer, nullable=True)
+    days_since_hatch = Column(Integer, nullable=True)
+    days_since_desertion_alert = Column(Integer, nullable=True)
+    time_of_emergence = Column(Integer, nullable=True)
+    weeks_batt_life_left = Column(Integer, nullable=True)
+    activity_yesterday = Column(Integer, nullable=True)
+    activity_two_days_ago = Column(Integer, nullable=True)
+    mean_activity_last_four_days = Column(Integer, nullable=True)

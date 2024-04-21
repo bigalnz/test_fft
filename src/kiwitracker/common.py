@@ -12,8 +12,6 @@ SamplesT = npt.NDArray[np.complex128]
 
 FloatArray = npt.NDArray[np.float64]
 
-# frozen=True -> makes dataclass hashable
-
 
 @dataclass
 class SampleConfig:
@@ -82,7 +80,7 @@ class ProcessConfig:
 @dataclass
 class ProcessResult:
     """
-    One result from the sample processor
+    One result from process_sample()
     """
 
     date: datetime.datetime
@@ -94,3 +92,37 @@ class ProcessResult:
     SNR: float
     latitude: float
     longitude: float
+
+
+@dataclass
+class CTResult:
+    """
+    One result from chick_timer()
+    """
+
+    channel: int
+    carrier_freq: float
+    decoding_success: bool
+
+    start_dt: datetime.datetime
+    end_dt: datetime.datetime
+
+    snr_min: float
+    snr_max: float
+    snr_mean: float
+
+    dbfs_min: float
+    dbfs_max: float
+    dbfs_mean: float
+
+    lat: float
+    lon: float
+
+    days_since_change_of_state: int | None = None
+    days_since_hatch: int | None = None
+    days_since_desertion_alert: int | None = None
+    time_of_emergence: int | None = None
+    weeks_batt_life_left: int | None = None
+    activity_yesterday: int | None = None
+    activity_two_days_ago: int | None = None
+    mean_activity_last_four_days: int | None = None
