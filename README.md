@@ -96,36 +96,36 @@ kiwitracker --help
 Which should display the following:
 
 ```bash
-usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER] [--no-use-gps]
+usage: kiwitracker [-h] [-f INFILE] [-db DB] [-d] [-o OUTFILE] [-m MAX_SAMPLES] [--scan] [--no-use-gps] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--bias-tee] [-log LOGLEVEL]
+                   [--carrier [CARRIER]]
 
 options:
   -h, --help            show this help message and exit
-
   -f INFILE, --from-file INFILE
                         Read samples from the given filename and process them
-
+  -db DB, --database DB
+                        SQLite database where to store processed results. Defaults to `main.db`. Environment variable KIWITRACKER_DB has priority.
+  -d, --delete-database
+                        If SQLite database file exists upon start, it is deleted.
   -o OUTFILE, --outfile OUTFILE
                         Read samples from the device and save to the given filename
-
   -m MAX_SAMPLES, --max-samples MAX_SAMPLES
                         Number of samples to read when "-o/--outfile" is specified
+  --scan                Scan for frequencies in first 3sec
+  --no-use-gps          Set this flag to not use GPS module
 
 Sampling:
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
                         Chunk size for sdr.read_samples (default: 65536)
-
   -s SAMPLE_RATE, --sample-rate SAMPLE_RATE
                         SDR sample rate (default: 1024000.0)
   --center-freq CENTER_FREQ
                         SDR center frequency (default: 160270968)
-
   -g GAIN, --gain GAIN  SDR gain (default: 7.7)
-
-  --no-use-gps          do not try to connect to GPS. Not supported on Windows.
+  --bias-tee            Enable bias tee
+  -log LOGLEVEL, --loglevel LOGLEVEL
+                        Provide logging level. Example --loglevel debug, default=warning
 
 Processing:
-  --carrier CARRIER     Carrier frequency to process (default: 160707760)
-  --scan                Scan first 3 seconds to detect frequencies
-  Note that --carrier and --scan are mutually exclusive - provide on or the other.
-
+  --carrier [CARRIER]   Carrier frequency to process (default: None)
 ```
