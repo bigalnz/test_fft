@@ -7,6 +7,7 @@ import math
 import statistics
 from datetime import datetime
 from functools import lru_cache
+from typing import AsyncIterator
 
 import numpy as np
 # TODO: This plotting stuff shouldn't propably be here:
@@ -111,7 +112,18 @@ def rising_falling_indices(samples: np.ndarray, unsmoothed_samples: np.ndarray) 
     return rising_edge_idx, falling_edge_idx
 
 
-async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig, N: int) -> list[int]:
+async def async_enumerate(async_gen: AsyncIterator, start: int, count: int):
+    cnt, end = start, start + count
+    async for item in async_gen:
+        yield cnt, item
+
+        cnt += 1
+
+        if cnt >= end:
+            break
+
+
+async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: ProcessConfig, N: int) -> list[int]:
     """
     Find beep frequencies from first N chunks.
 
@@ -120,8 +132,8 @@ async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig,
 
     out = set()
 
-    for i in range(N):
-        logger.debug(f"Scanning chunk no. {i+1}...")
+    async for i, samples in async_enumerate(source_gen, 1, N):
+        logger.debug(f"Scanning chunk no. {i}...")
 
         # print("find beep freq ran")
         # look for the presence of a beep within the chunk and :
@@ -133,7 +145,7 @@ async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig,
         # This function needs to operated on the first 12 chunks (3 seconds) of data
         # The detected beep array should reject any value not between 160110000 and 161120000
 
-        samples = await samples_queue.get()
+        # samples = await samples_queue.get()
 
         # f = np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
         size = pc.fft_size
@@ -183,8 +195,6 @@ async def find_beep_frequencies(samples_queue: asyncio.Queue, pc: ProcessConfig,
                     if 160_100_110 <= (new_f := f + pc.sample_config.center_freq) <= 161_120_000
                 ),
             }
-
-        samples_queue.task_done()
 
     return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
 

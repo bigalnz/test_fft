@@ -5,8 +5,7 @@ import pytest
 
 from kiwitracker.common import ProcessConfig, SampleConfig
 from kiwitracker.sample_processor import find_beep_frequencies
-from kiwitracker.sample_reader import (chunk_numpy_file, pipeline,
-                                       samples_source_file)
+from kiwitracker.sample_reader import chunk_numpy_file, pipeline, source_file
 
 
 @pytest.mark.asyncio
@@ -17,16 +16,19 @@ async def test_scan(request, process_config):
     process_config.sample_config.center_freq = 160_500_000
     process_config.sample_config.gain = 14.4
 
-    samples_queue = asyncio.Queue()
-    reader_task_fn = asyncio.create_task(
-        samples_source_file(p, process_config.num_samples_to_process, None)(samples_queue)
+    find_beep_freqs_task = asyncio.create_task(
+        find_beep_frequencies(
+            source_file(
+                p,
+                process_config.num_samples_to_process,
+                None,
+            ),
+            process_config,
+            N=13,
+        )
     )
 
-    find_beep_freqs_task = asyncio.create_task(find_beep_frequencies(samples_queue, process_config, N=13))
-
     result = await find_beep_freqs_task
-
-    reader_task_fn.cancel()
 
     assert [160338981, 160708141] == result
 
@@ -43,7 +45,7 @@ async def test_process_sample(request, async_queue_to_list, process_config):
 
     await pipeline(
         process_config=process_config,
-        task_samples_input=samples_source_file(
+        source_gen=source_file(
             p,
             process_config.num_samples_to_process,
             num_chunks=50,
@@ -101,7 +103,7 @@ async def test_multiple_4_s8(request, async_queue_to_list):
     data = []
     await pipeline(
         process_config=pc,
-        task_samples_input=samples_source_file(
+        source_gen=source_file(
             request.config.rootpath / "data" / "test_multiple_4.s8",
             pc.num_samples_to_process,
             num_chunks=None,

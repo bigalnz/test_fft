@@ -6,7 +6,7 @@ import concurrent.futures
 import logging
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Self, TypeAlias
+from typing import TYPE_CHECKING, AsyncIterator, Self, TypeAlias
 
 import numpy as np
 import rtlsdr
@@ -547,11 +547,10 @@ def main():
         asyncio.run(
             pipeline(
                 process_config=process_config,
-                task_samples_input=samples_source_file(
+                source_gen=source_file(
                     filename=args.infile,
                     N=process_config.num_samples_to_process,
                     num_chunks=None,
-                    wait_for_handling=True,
                 ),
                 task_results=results_pipeline(),
             )
@@ -572,7 +571,7 @@ def main():
         asyncio.run(
             pipeline(
                 process_config=process_config,
-                task_samples_input=samples_source_radio(
+                source_gen=source_radio(
                     reader=SampleReader(sample_config),
                     buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
                     num_samples_to_process=process_config.num_samples_to_process,
@@ -756,62 +755,68 @@ def chunk_numpy_file(filename, dtype, N):
         current_offset += N * dtype.itemsize
 
 
-def samples_source_file(filename, N, num_chunks, wait_for_handling=True):
+async def source_file(
+    filename: str,
+    N: int,
+    num_chunks: int | None,
+) -> AsyncIterator[np.ndarray]:
     """
     filename          -> file to read from
     N                 -> from ProcessConfig.num_samples_to_process
     num_chunks        -> how many chunks to read (or None for all)
-    wait_for_handling -> put None to queue at the end (to indicate end)
-                         and wait for all processing
     """
+
     file_dtype = filename_to_dtype(filename)
 
-    async def _inner(samples_queue):
-        for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
-            await samples_queue.put(chunk)
+    for chunks_processed, chunk in enumerate(chunk_numpy_file(filename, file_dtype, N), 1):
+        yield chunk
+        await asyncio.sleep(0)
 
-            if num_chunks is not None and chunks_processed >= num_chunks:
-                break
-
-        if wait_for_handling:
-            await samples_queue.put(None)  # Indicate that we are done with samples
-            await samples_queue.join()
-
-    return _inner
+        if num_chunks is not None and chunks_processed >= num_chunks:
+            break
 
 
-def samples_source_radio(reader: SampleReader, buffer: SampleBuffer, num_samples_to_process: int):
+async def source_radio(
+    reader: SampleReader,
+    buffer: SampleBuffer,
+    num_samples_to_process: int,
+) -> AsyncIterator[np.ndarray]:
     """
     reader                  -> the radio
     buffer                  -> where to put samples from the radio
     num_samples_to_process  -> number of samples in one chunk
     """
 
-    async def _inner(samples_queue):
-        reader.buffer = buffer
-
-        async with reader:
-            await reader.open_stream()
-            while True:
-                chunk = await buffer.get(num_samples_to_process)
-                await samples_queue.put(chunk)
-
-    return _inner
+    reader.buffer = buffer
+    async with reader:
+        await reader.open_stream()
+        while True:
+            chunk = await buffer.get(num_samples_to_process)
+            yield chunk
 
 
-# this will just read from the queue and discard any data
-async def _discard_results(process_config: ProcessConfig, out_queue: asyncio.Queue):
+async def _discard_results(
+    process_config: ProcessConfig,
+    out_queue: asyncio.Queue,
+) -> None:
+    """
+    discard all results from async queue
+    """
+
     while True:
         _ = await out_queue.get()
         out_queue.task_done()
 
 
-async def scan_for_frequencies(samples_queue: asyncio.Queue, process_config: ProcessConfig) -> list[float]:
+async def scan_for_frequencies(
+    source_gen: AsyncIterator[np.ndarray],
+    process_config: ProcessConfig,
+) -> list[float]:
 
     assert process_config.carrier_freq is None
 
     try:
-        frequencies = await find_beep_frequencies(samples_queue, process_config, N=13)
+        frequencies = await find_beep_frequencies(source_gen, process_config, N=13)
 
         if not frequencies:
             logger.error("No frequency detected, exiting...")
@@ -826,17 +831,17 @@ async def scan_for_frequencies(samples_queue: asyncio.Queue, process_config: Pro
         raise
 
 
-# TODO: process config could be list (define carrier frequencies from command line)
-async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_samples_input, task_results=None):
+async def pipeline(
+    process_config: list[ProcessConfig] | ProcessConfig,
+    source_gen: AsyncIterator[np.ndarray],
+    task_results=None,
+) -> None:
     """
     process_config     -> ...
     task_samples_input -> callable with one argument (samples_queue), must return async task
     task_results       -> callable with one argument (out_queue), must return async task
                           can be None (then all results are discarded)
     """
-
-    samples_queue = asyncio.Queue()
-    task_samples_source = asyncio.create_task(task_samples_input(samples_queue))
 
     if task_results is None:
         task_results = _discard_results
@@ -847,12 +852,13 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
     # - single process config with defined carrier_freq
     match process_config:
         case list():
+            # TODO: process config could be list (define carrier frequencies from command line)
             # list of fully defined ProcessConfigs (with carrier_freq defined from command line)
             raise NotImplementedError("Multiple process_configs in pipeline not yet implemented.")
         case ProcessConfig() if process_config.carrier_freq is None:
             # carrier_freq is None - we should scan for frequencies
             logger.info("Carrier frequency not set - start scanning...")
-            frequencies = await scan_for_frequencies(samples_queue, process_config)
+            frequencies = await scan_for_frequencies(source_gen, process_config)
 
             # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
             logger.info(f"Picking first one: {frequencies[0]}")
@@ -884,37 +890,18 @@ async def pipeline(process_config: list[ProcessConfig] | ProcessConfig, task_sam
         process_tasks.add(task_sample_processor)
         result_tasks.add(task_result)
 
-    # start reading samples and distrubute them to all process queues
-    while True:
-        await asyncio.sleep(0.0001)  # yield control to other tasks
-
-        sample = await samples_queue.get()
-
+    async for sample in source_gen:
         # distribute the sample to all process queues:
         for pq in process_queues:
-            pq.put_nowait(sample)
-
-        samples_queue.task_done()
-
-        # we received `None` from source (e.g. we finished reading from the file),
-        # so end all the processing
-        if sample is None:
-            break
+            await pq.put(sample)
 
     # wait for processing:
     for pq in process_queues:
         await pq.join()
 
-    await samples_queue.join()
-
     # cancel all tasks:
-    for t in process_tasks:
+    for t in [*process_tasks, *result_tasks]:
         t.cancel()
-
-    for t in result_tasks:
-        t.cancel()
-
-    task_samples_source.cancel()
 
 
 if __name__ == "__main__":
