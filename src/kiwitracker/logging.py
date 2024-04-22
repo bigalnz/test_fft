@@ -3,6 +3,19 @@ import logging
 logger = logging.getLogger("KiwiTracker")
 
 
+def _setup_logging_alembic(level="INFO"):
+    l = logging.getLogger("alembic")
+    l.setLevel(level)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(level)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(filename)s - %(levelname)s - %(message)s")
+    ch.setFormatter(formatter)
+
+    l.addHandler(ch)
+
+
 def setup_logging(level="DEBUG"):
     # Setup Logging
     # create logger with 'my_application'
@@ -25,3 +38,5 @@ def setup_logging(level="DEBUG"):
     # add the handlers to the logger
     logger.addHandler(fh)
     logger.addHandler(ch)
+
+    _setup_logging_alembic(level)

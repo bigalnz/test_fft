@@ -13,7 +13,9 @@ import rtlsdr
 from sqlalchemy.orm import Session
 
 from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
-from kiwitracker.db.engine import get_sqlalchemy_engine
+from kiwitracker.db.engine import (construct_db_connection_string,
+                                   construct_sqlalchemy_engine,
+                                   get_sqlalchemy_engine, migrate_if_needed)
 from kiwitracker.db.models import BPM, ChickTimerResult
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
@@ -47,7 +49,6 @@ class SampleReader:
         self._callback_futures: set[concurrent.futures.Future] = set()
         self._wrapped_futures: set[asyncio.Future] = set()
         self._cleanup_task: asyncio.Task | None = None
-        # self.logger = logging.getLogger("KiwiTracker")
 
     @property
     def sample_rate(self):
@@ -422,6 +423,22 @@ def main():
         help="Read samples from the given filename and process them",
     )
     p.add_argument(
+        "-db",
+        "--database",
+        dest="db",
+        default=None,
+        help="SQLite database where to store processed results. Defaults to `main.db`. Environment variable KIWITRACKER_DB has priority.",
+    )
+
+    p.add_argument(
+        "-d",
+        "--delete-database",
+        dest="deletedb",
+        action="store_true",
+        help="If SQLite database file exists upon start, it is deleted.",
+    )
+
+    p.add_argument(
         "-o",
         "--outfile",
         dest="outfile",
@@ -504,6 +521,20 @@ def main():
     args = p.parse_args()
 
     setup_logging(level=args.loglevel.upper())
+
+    if args.deletedb:
+        db_filename = construct_db_connection_string(db_file=args.db).removeprefix("sqlite:///")
+
+        if os.path.exists(db_filename):
+            logger.info(f"Deleting DB file {db_filename}")
+            os.remove(db_filename)
+
+    construct_sqlalchemy_engine(db_file=args.db)
+    engine = get_sqlalchemy_engine()
+
+    logger.info(f"Using DB connection URL: {engine.url.render_as_string(hide_password=False)}")
+
+    migrate_if_needed(engine, "head")
 
     if args.scan and args.carrier is not None:
         print("--scan and --carrier cannot be provided simultaneously.")
