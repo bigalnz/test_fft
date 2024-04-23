@@ -20,7 +20,7 @@ However the encoding of fast telemetry between beeps means that the interval bet
 | 30 | 2 |
 | 40 | Nesting |
 | 50 | 3 |
-| 60 | 4 |
+| 60 | 4 | 74.07
 | 70 | Not Nesting |
 | 80 | 5 | 
 | 90 | 6 |
