@@ -583,7 +583,7 @@ def main():
                     N=process_config.num_samples_to_process,
                     num_chunks=None,
                 ),
-                task_results=results_pipeline(),
+                task_results=results_pipeline,
             )
         )
 
@@ -607,7 +607,7 @@ def main():
                     buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
                     num_samples_to_process=process_config.num_samples_to_process,
                 ),
-                task_results=results_pipeline(),
+                task_results=results_pipeline,
             )
         )
 
@@ -633,19 +633,35 @@ def main():
     #     asyncio.run(run_main(sample_config=sample_config, process_config=process_config))
 
 
-def results_pipeline():
-
-    # We need:
-    # 1. Read the processed BPM from queue
-    # 2. Write the processed BPM to database
-    # 3. Put processed BPM down to chick_timer()
-    # 4. Save the CT (even incomplete, in case of error in BPMs) to DB
-
-    async def _write_ct_result_to_db(queue: asyncio.Queue, db_session: Session):
+async def store_bpm_to_db(queue: asyncio.Queue) -> None:
+    with Session(get_sqlalchemy_engine()) as db_session:
         while True:
             r = await queue.get()
 
-            ctr = ChickTimerResult(
+            bpm = BPM(
+                dt=r.date,
+                channel=r.channel,
+                bpm=r.BPM,
+                dbfs=r.DBFS,
+                clipping=r.CLIPPING,
+                duration=r.BEEP_DURATION,
+                snr=r.SNR,
+                lat=r.latitude,
+                lon=r.longitude,
+            )
+
+            db_session.add(bpm)
+
+            db_session.commit()
+            queue.task_done()
+
+
+async def store_ct_to_db(queue: asyncio.Queue) -> None:
+    with Session(get_sqlalchemy_engine()) as db_session:
+        while True:
+            r = await queue.get()
+
+            ct = ChickTimerResult(
                 channel=r.channel,
                 carrier_freq=r.carrier_freq,
                 decoding_success=r.decoding_success,
@@ -669,52 +685,44 @@ def results_pipeline():
                 mean_activity_last_four_days=r.mean_activity_last_four_days,
             )
 
-            db_session.add(ctr)
+            db_session.add(ct)
             db_session.commit()
 
             queue.task_done()
 
-    async def _inner(process_config: ProcessConfig, queue: asyncio.Queue):
-        ct_inp_queue, ct_out_queue = asyncio.Queue(), asyncio.Queue()
 
-        with Session(get_sqlalchemy_engine()) as db_session:
+async def results_pipeline(
+    pc: ProcessConfig,
+    queue: asyncio.Queue,
+) -> None:
 
-            chick_timer_task = asyncio.create_task(chick_timer(process_config, ct_inp_queue, ct_out_queue))
-            ct_to_db_task = asyncio.create_task(_write_ct_result_to_db(ct_out_queue, db_session))
+    store_bpm_to_db_queue = asyncio.Queue()
+    chick_timer_queue = asyncio.Queue()
+    store_ct_to_db_queue = asyncio.Queue()
 
-            while True:
-                result = await queue.get()
+    tasks = [
+        asyncio.create_task(store_bpm_to_db(store_bpm_to_db_queue)),
+        asyncio.create_task(chick_timer(pc, chick_timer_queue, [store_ct_to_db_queue])),
+        asyncio.create_task(store_ct_to_db(store_ct_to_db_queue)),
+        # TODO: fast_telemetry
+        # TODO: store_ft_to_db
+    ]
 
-                # write the result (BPM) to database:
-                bpm = BPM(
-                    dt=result.date,
-                    channel=result.channel,
-                    bpm=result.BPM,
-                    dbfs=result.DBFS,
-                    clipping=result.CLIPPING,
-                    duration=result.BEEP_DURATION,
-                    snr=result.SNR,
-                    lat=result.latitude,
-                    lon=result.longitude,
-                )
+    while True:
+        bpm_result = await queue.get()
 
-                db_session.add(bpm)
+        for q in (store_bpm_to_db_queue, chick_timer_queue):
+            await q.put(bpm_result)
 
-                db_session.commit()
-                queue.task_done()
+        queue.task_done()
 
-                # put the result to chick_timer()
-                await ct_inp_queue.put(result)
+    # wait for queues
+    for q in (store_bpm_to_db_queue, chick_timer_queue, store_ct_to_db_queue):
+        await q.join()
 
-                # chick_timer() will process the BPMs and put CT results to `ct_out_queue`
-
-            chick_timer_task.cancel()
-            ct_to_db_task.cancel()
-
-        await ct_inp_queue.join()
-        await ct_out_queue.join()
-
-    return _inner
+    # cancel all tasks
+    for t in tasks:
+        t.cancel()
 
 
 async def run_readonly(sample_config: SampleConfig, filename: str, max_samples: int):
@@ -827,16 +835,16 @@ async def source_radio(
 
 
 async def _discard_results(
-    process_config: ProcessConfig,
-    out_queue: asyncio.Queue,
+    _: ProcessConfig,
+    queue: asyncio.Queue,
 ) -> None:
     """
     discard all results from async queue
     """
 
     while True:
-        _ = await out_queue.get()
-        out_queue.task_done()
+        _ = await queue.get()
+        queue.task_done()
 
 
 async def scan_for_frequencies(
@@ -905,29 +913,31 @@ async def pipeline(
     # - task for processing sample
     # - task for handling processed sample (detected BPM.)
     #
-    # for each `processing sample task` we create `process queue` and `out queue`
+    # for each `processing sample task` we create `process queue` and `result_queue`
     # so we can distribute samples from task_samples_source() to each `process queue`
-    # `processing sample task` will put detected BPMs to `out queue` for further handling.
-    process_queues, process_tasks, result_tasks = set(), set(), set()
+    # `processing sample task` will put detected BPMs to `result_queue` for further handling.
+    process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
     for i, pc in enumerate(process_config, 1):
         logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
-        out_queue = asyncio.Queue()
+        result_queue = asyncio.Queue()
         process_queue = asyncio.Queue()
 
-        task_result = asyncio.create_task(task_results(pc, out_queue))
-        task_sample_processor = asyncio.create_task(process_sample(pc, process_queue, out_queue))
+        task_sample_processor = asyncio.create_task(process_sample(pc, process_queue, [result_queue]))
+        task_result = asyncio.create_task(task_results(pc, result_queue))
 
         process_queues.add(process_queue)
+        result_queues.add(result_queue)
+
         process_tasks.add(task_sample_processor)
         result_tasks.add(task_result)
 
+    # distribute samples to all process queues:
     async for sample in source_gen:
-        # distribute the sample to all process queues:
         for pq in process_queues:
             await pq.put(sample)
 
     # wait for processing:
-    for pq in process_queues:
+    for pq in [*process_queues, *result_queues]:
         await pq.join()
 
     # cancel all tasks:

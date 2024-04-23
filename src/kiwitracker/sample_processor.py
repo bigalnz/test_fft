@@ -199,11 +199,15 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
     return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
 
 
-async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_queue: asyncio.Queue) -> None:
+async def process_sample(
+    pc: ProcessConfig,
+    samples_queue: asyncio.Queue,
+    out_queues: list[asyncio.Queue],
+) -> None:
     """
     Process sample asyncio task
 
-    This task reads samples from samples_queue and detected beeps puts into out_queue.
+    This task reads samples from samples_queue and detected beeps puts into out_queues.
     Runs forever till reads `None` from samples_queue.
     """
 
@@ -353,7 +357,8 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 
         res = ProcessResult(datetime.now(), ch, BPM, DBFS, CLIPPING, BEEP_DURATION, SNR, latitude, longitude)
 
-        await out_queue.put(res)
+        for q in out_queues:
+            await q.put(res)
 
         beep_slice = False
         stateful_index += samples.size  # + 14
@@ -366,7 +371,7 @@ async def process_sample(pc: ProcessConfig, samples_queue: asyncio.Queue, out_qu
 async def chick_timer(
     pc: ProcessConfig,
     queue: asyncio.Queue,
-    out_queue: asyncio.Queue,
+    out_queues: list[asyncio.Queue],
 ):
 
     assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
@@ -523,7 +528,8 @@ async def chick_timer(
             **out,
         )
 
-        await out_queue.put(r)
+        for q in out_queues:
+            await q.put(r)
 
         if not decoding_success:
             logger.info("CT: Skiping next 100 beeps due to failed decoding!")
