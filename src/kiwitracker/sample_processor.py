@@ -371,20 +371,44 @@ async def chick_timer(
 
     assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
 
+    def _is_valid_range(normalized_bpm: float, real_bpm: float) -> bool:
+        match normalized_bpm:
+            case 80.0:
+                return 66.41 <= real_bpm <= 81.0
+            case 48.0:
+                return 42.16 <= real_bpm <= 49.0
+            case 30.0:
+                return 27.03 <= real_bpm <= 31.0
+            case 20.0:
+                return 18.1082 <= real_bpm <= 21.0
+            case 16.0:
+                return 14.42 <= real_bpm <= 17.0
+            case _:
+                raise ChickTimerProcessingError(f"Unknown normalized BPM value: {normalized_bpm=}/{real_bpm=}")
+
     async def _get_normalized_bpm(valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> tuple[float, ProcessResult]:
         process_result = await queue.get()
-        normalized_BPM = min(valid_bpms, key=lambda k: abs(k - process_result.BPM))
         queue.task_done()
+
+        normalized_BPM = min(valid_bpms, key=lambda k: abs(k - process_result.BPM))
+
+        if not _is_valid_range(normalized_BPM, process_result.BPM):
+            raise ChickTimerProcessingError(f"BPM not in valid range: {normalized_BPM=}/{process_result.BPM=}")
+
         return normalized_BPM, process_result
 
     async def _wait_for_start(start_bpm: float, snrs: list, dbfs: list) -> None:
         while True:
-            normalized_bpm, res = await _get_normalized_bpm()
+            try:
+                normalized_bpm, res = await _get_normalized_bpm()
 
-            if normalized_bpm == start_bpm:
-                snrs.append(res.SNR)
-                dbfs.append(res.DBFS)
-                return
+                if normalized_bpm == start_bpm:
+                    snrs.append(res.SNR)
+                    dbfs.append(res.DBFS)
+                    return
+
+            except ChickTimerProcessingError as err:
+                logger.exception(err)
 
     async def _wait_specific_num_of_beeps(num: int) -> None:
         while num > 0:
@@ -446,7 +470,6 @@ async def chick_timer(
         start_dt = None
 
         try:
-
             for n in numbers_to_find:
                 await _wait_for_start(20.0, snrs, dbfs)
 
