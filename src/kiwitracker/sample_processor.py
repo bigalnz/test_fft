@@ -16,6 +16,7 @@ from scipy import signal
 
 from kiwitracker.common import CTResult, ProcessConfig, ProcessResult
 from kiwitracker.exceptions import ChickTimerProcessingError
+from kiwitracker.fasttelemetry import FT_DICT
 
 logger = logging.getLogger("KiwiTracker")
 
@@ -368,6 +369,76 @@ async def process_sample(
         samples_queue.task_done()
 
 
+def is_bpm_valid(normalized_bpm: float, real_bpm: float) -> bool:
+    match normalized_bpm:
+        case 80.0:
+            return 66.41 <= real_bpm <= 81.0
+        case 48.0:
+            return 42.16 <= real_bpm <= 49.0
+        case 30.0:
+            return 27.03 <= real_bpm <= 31.0
+        case 20.0:
+            return 18.1082 <= real_bpm <= 21.0
+        case 16.0:
+            return 14.42 <= real_bpm <= 17.0
+        case _:
+            raise ValueError(f"Unknown normalized BPM value: {normalized_bpm=}/{real_bpm=}")
+
+
+def normalize_bpm(bpm: float, valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> float:
+    normalized_bpm = min(valid_bpms, key=lambda k: abs(k - bpm))
+
+    if not is_bpm_valid(normalized_bpm, bpm):
+        raise ValueError(f"BPM not in valid range: {normalized_bpm=}/{bpm=}")
+
+    return normalized_bpm
+
+
+# | Encoded Value | Pulse Delay(ms) | BPM       |       |       |       |       |       |
+# |---------------|-----------------|-----------|-------|-------|-------|-------|-------|
+# | 0             | 0               | 80        | 48    | 34.28 | 30    | 20    | 16    |
+# | Mortality     | 10              | 78.95     | 47.62 | 34.09 | 29.85 | 19.93 | 15.96 |
+# | 1             | 20              | 77.92     | 47.24 | 33.89 | 29.70 | 19.87 | 15.92 |
+# | 2             | 30              | 76.92     | 46.88 | 33.70 | 29.56 | 19.80 | 15.87 |
+# | Nesting       | 40              | 75.95     | 46.51 | 33.51 | 29.41 | 19.74 | 15.83 |
+# | 3             | 50              | 75.00     | 46.15 | 33.33 | 29.27 | 19.67 | 15.79 |
+# | 4             | 60              | 74.07     | 45.80 | 33.14 | 29.13 | 19.61 | 15.75 |
+# | Not Nesting   | 70              | 73.17     | 45.45 | 32.96 | 28.99 | 19.54 | 15.71 |
+# | 5             | 80              | 72.29     | 45.11 | 32.78 | 28.85 | 19.48 | 15.67 |
+# | 6             | 90              | 71.43     | 44.78 | 32.60 | 28.71 | 19.42 | 15.63 |
+# | Hatch         | 100             | 70.59     | 44.44 | 32.43 | 28.57 | 19.35 | 15.58 |
+# | 7             | 110             | 69.77     | 44.12 | 32.25 | 28.44 | 19.29 | 15.54 |
+# | 8             | 120             | 68.97     | 43.80 | 32.08 | 28.30 | 19.23 | 15.50 |
+# | Deserting     | 130             | 68.18     | 43.48 | 31.91 | 28.17 | 19.17 | 15.46 |
+# | 9             | 140             | 67.42     | 43.17 | 31.74 | 28.04 | 19.11 | 15.42 |
+
+
+async def fast_telemetry(
+    pc: ProcessConfig,
+    queue: asyncio.Queue,
+    out_queues: list[asyncio.Queue],
+):
+    assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
+
+    async def _wait_for_state():
+        while True:
+            process_result = await queue.get()
+            queue.task_done()
+
+            try:
+                normalized_bpm = normalize_bpm(process_result.BPM)
+            except ValueError as err:
+                logger.exception(err)
+                continue
+
+            k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
+            logger.debug(f"FT: Found {k=}/{v=}")
+
+    await _wait_for_state()
+    # while True:
+    #     state = await _wait_for_state()
+
+
 async def chick_timer(
     pc: ProcessConfig,
     queue: asyncio.Queue,
@@ -376,31 +447,10 @@ async def chick_timer(
 
     assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
 
-    def _is_valid_range(normalized_bpm: float, real_bpm: float) -> bool:
-        match normalized_bpm:
-            case 80.0:
-                return 66.41 <= real_bpm <= 81.0
-            case 48.0:
-                return 42.16 <= real_bpm <= 49.0
-            case 30.0:
-                return 27.03 <= real_bpm <= 31.0
-            case 20.0:
-                return 18.1082 <= real_bpm <= 21.0
-            case 16.0:
-                return 14.42 <= real_bpm <= 17.0
-            case _:
-                raise ChickTimerProcessingError(f"Unknown normalized BPM value: {normalized_bpm=}/{real_bpm=}")
-
-    async def _get_normalized_bpm(valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> tuple[float, ProcessResult]:
+    async def _get_normalized_bpm() -> tuple[float, ProcessResult]:
         process_result = await queue.get()
         queue.task_done()
-
-        normalized_BPM = min(valid_bpms, key=lambda k: abs(k - process_result.BPM))
-
-        if not _is_valid_range(normalized_BPM, process_result.BPM):
-            raise ChickTimerProcessingError(f"BPM not in valid range: {normalized_BPM=}/{process_result.BPM=}")
-
-        return normalized_BPM, process_result
+        return normalize_bpm(process_result.BPM), process_result
 
     async def _wait_for_start(start_bpm: float, snrs: list, dbfs: list) -> None:
         while True:
@@ -412,7 +462,7 @@ async def chick_timer(
                     dbfs.append(res.DBFS)
                     return
 
-            except ChickTimerProcessingError as err:
+            except ValueError as err:
                 logger.exception(err)
 
     async def _wait_specific_num_of_beeps(num: int) -> None:
@@ -496,6 +546,8 @@ async def chick_timer(
             decoding_success = True
             logger.info(f"CT: Complete CT found! {out}")
         except ChickTimerProcessingError as err:
+            logger.exception(err)
+        except ValueError as err:
             logger.exception(err)
 
         end_dt = datetime.now()

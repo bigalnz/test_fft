@@ -20,7 +20,8 @@ from kiwitracker.db.models import BPM, ChickTimerResult
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
-from kiwitracker.sample_processor import (chick_timer, find_beep_frequencies,
+from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
+                                          find_beep_frequencies,
                                           process_sample)
 
 RtlSdr: TypeAlias = rtlsdr.rtlsdraio.RtlSdrAio
@@ -700,7 +701,10 @@ async def results_pipeline(
     chick_timer_queue = asyncio.Queue()
     store_ct_to_db_queue = asyncio.Queue()
 
+    fast_telemetry_queue = asyncio.Queue()
+
     tasks = [
+        asyncio.create_task(fast_telemetry(pc, fast_telemetry_queue, [])),
         asyncio.create_task(store_bpm_to_db(store_bpm_to_db_queue)),
         asyncio.create_task(chick_timer(pc, chick_timer_queue, [store_ct_to_db_queue])),
         asyncio.create_task(store_ct_to_db(store_ct_to_db_queue)),
@@ -711,13 +715,20 @@ async def results_pipeline(
     while True:
         bpm_result = await queue.get()
 
-        for q in (store_bpm_to_db_queue, chick_timer_queue):
+        for q in (store_bpm_to_db_queue, chick_timer_queue, fast_telemetry_queue):
             await q.put(bpm_result)
+        # for q in (fast_telemetry_queue,):
+        # await q.put(bpm_result)
 
         queue.task_done()
 
     # wait for queues
-    for q in (store_bpm_to_db_queue, chick_timer_queue, store_ct_to_db_queue):
+    for q in (
+        store_bpm_to_db_queue,
+        chick_timer_queue,
+        store_ct_to_db_queue,
+        fast_telemetry_queue,
+    ):
         await q.join()
 
     # cancel all tasks
@@ -759,9 +770,9 @@ def filename_to_dtype(filename):
         case ".fc32":
             file_dtype = np.dtype(np.complex64)
         case ".sc8":
-            file_dtype = np.dtype(np.uint8)
-        case ".s8":
             file_dtype = np.dtype(np.int8)
+        case ".s8":
+            file_dtype = np.dtype(np.uint8)
         case ".npy":
             # read the sample data type from the first sample in the file
             file_dtype = np.dtype(type(np.load(filename, mmap_mode="r")[0]))
@@ -777,13 +788,17 @@ def chunk_numpy_file(filename, dtype, N):
         arr = np.fromfile(filename, dtype=dtype, count=N, offset=current_offset)
 
         # Convert unsigned 8 bit samples to 32 bit floats and complex
-        if dtype == "int8":
-            iq = arr.astype(np.float32).view(np.complex64)
-            iq /= 127.5
-            iq -= 1 + 1j
+        # https://k3xec.com/packrat-processing-iq/ (RTL-SDR part)
+        if dtype == "uint8":
+            iq = arr.astype(np.float32).view(np.complex64)  # 255 + 255j   0 + 0j
+            iq /= 127.5  # 2 + 2j       0 + 0j
+            iq -= 1 + 1j  # 1 + 1j      -1 + 1j
             arr = iq.copy()
-
-        if dtype == np.complex128:
+        elif dtype == "int8":
+            iq = arr.astype(np.float32).view(np.complex64)  # 128 + 128j  -127 - 127j
+            iq /= 128  # 1 + 1j      -0.992 - 0.992j
+            arr = iq.copy()
+        elif dtype == "complex128":
             arr = arr.astype(np.complex64)
 
         if len(arr) == 0:
