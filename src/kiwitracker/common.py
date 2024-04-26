@@ -126,3 +126,31 @@ class CTResult:
     activity_yesterday: int | None = None
     activity_two_days_ago: int | None = None
     mean_activity_last_four_days: int | None = None
+
+
+@dataclass
+class FTResult:
+    """
+    One result from fast_telemetry()
+    """
+
+    channel: int
+    carrier_freq: float
+
+    start_dt: datetime.datetime
+    end_dt: datetime.datetime
+
+    snr_min: float
+    snr_max: float
+    snr_mean: float
+
+    dbfs_min: float
+    dbfs_max: float
+    dbfs_mean: float
+
+    lat: float
+    lon: float
+
+    mode: str
+    d1: int
+    d2: int

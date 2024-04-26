@@ -16,7 +16,7 @@ from kiwitracker.common import ProcessConfig, SampleConfig, SamplesT
 from kiwitracker.db.engine import (construct_db_connection_string,
                                    construct_sqlalchemy_engine,
                                    get_sqlalchemy_engine, migrate_if_needed)
-from kiwitracker.db.models import BPM, ChickTimerResult
+from kiwitracker.db.models import BPM, ChickTimerResult, FastTelemetryResult
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
@@ -657,6 +657,35 @@ async def store_bpm_to_db(queue: asyncio.Queue) -> None:
             queue.task_done()
 
 
+async def store_ft_to_db(queue: asyncio.Queue) -> None:
+    with Session(get_sqlalchemy_engine()) as db_session:
+        while True:
+            r = await queue.get()
+
+            ft = FastTelemetryResult(
+                channel=r.channel,
+                carrier_freq=r.carrier_freq,
+                start_dt=r.start_dt,
+                end_dt=r.end_dt,
+                snr_min=r.snr_min,
+                snr_max=r.snr_max,
+                snr_mean=r.snr_mean,
+                dbfs_min=r.dbfs_min,
+                dbfs_max=r.dbfs_max,
+                dbfs_mean=r.dbfs_mean,
+                lat=r.lat,
+                lon=r.lon,
+                mode=r.mode,
+                d1=r.d1,
+                d2=r.d2,
+            )
+
+            db_session.add(ft)
+            db_session.commit()
+
+            queue.task_done()
+
+
 async def store_ct_to_db(queue: asyncio.Queue) -> None:
     with Session(get_sqlalchemy_engine()) as db_session:
         while True:
@@ -697,19 +726,18 @@ async def results_pipeline(
     queue: asyncio.Queue,
 ) -> None:
 
-    store_bpm_to_db_queue = asyncio.Queue()
-    chick_timer_queue = asyncio.Queue()
-    store_ct_to_db_queue = asyncio.Queue()
-
     fast_telemetry_queue = asyncio.Queue()
+    chick_timer_queue = asyncio.Queue()
+    store_bpm_to_db_queue = asyncio.Queue()
+    store_ct_to_db_queue = asyncio.Queue()
+    store_ft_to_db_queue = asyncio.Queue()
 
     tasks = [
-        asyncio.create_task(fast_telemetry(pc, fast_telemetry_queue, [])),
         asyncio.create_task(store_bpm_to_db(store_bpm_to_db_queue)),
         asyncio.create_task(chick_timer(pc, chick_timer_queue, [store_ct_to_db_queue])),
+        asyncio.create_task(fast_telemetry(pc, fast_telemetry_queue, [store_ft_to_db_queue])),
         asyncio.create_task(store_ct_to_db(store_ct_to_db_queue)),
-        # TODO: fast_telemetry
-        # TODO: store_ft_to_db
+        asyncio.create_task(store_ft_to_db(store_ft_to_db_queue)),
     ]
 
     while True:
@@ -717,8 +745,6 @@ async def results_pipeline(
 
         for q in (store_bpm_to_db_queue, chick_timer_queue, fast_telemetry_queue):
             await q.put(bpm_result)
-        # for q in (fast_telemetry_queue,):
-        # await q.put(bpm_result)
 
         queue.task_done()
 
@@ -727,6 +753,7 @@ async def results_pipeline(
         store_bpm_to_db_queue,
         chick_timer_queue,
         store_ct_to_db_queue,
+        store_ft_to_db_queue,
         fast_telemetry_queue,
     ):
         await q.join()
@@ -792,7 +819,7 @@ def chunk_numpy_file(filename, dtype, N):
         if dtype == "uint8":
             iq = arr.astype(np.float32).view(np.complex64)  # 255 + 255j   0 + 0j
             iq /= 127.5  # 2 + 2j       0 + 0j
-            iq -= 1 + 1j  # 1 + 1j      -1 + 1j
+            iq -= 1 + 1j  # 1 + 1j      -1 - 1j
             arr = iq.copy()
         elif dtype == "int8":
             iq = arr.astype(np.float32).view(np.complex64)  # 128 + 128j  -127 - 127j

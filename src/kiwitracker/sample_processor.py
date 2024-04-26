@@ -14,7 +14,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal
 
-from kiwitracker.common import CTResult, ProcessConfig, ProcessResult
+from kiwitracker.common import CTResult, FTResult, ProcessConfig, ProcessResult
 from kiwitracker.exceptions import ChickTimerProcessingError
 from kiwitracker.fasttelemetry import FT_DICT
 
@@ -394,25 +394,6 @@ def normalize_bpm(bpm: float, valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> floa
     return normalized_bpm
 
 
-# | Encoded Value | Pulse Delay(ms) | BPM       |       |       |       |       |       |
-# |---------------|-----------------|-----------|-------|-------|-------|-------|-------|
-# | 0             | 0               | 80        | 48    | 34.28 | 30    | 20    | 16    |
-# | Mortality     | 10              | 78.95     | 47.62 | 34.09 | 29.85 | 19.93 | 15.96 |
-# | 1             | 20              | 77.92     | 47.24 | 33.89 | 29.70 | 19.87 | 15.92 |
-# | 2             | 30              | 76.92     | 46.88 | 33.70 | 29.56 | 19.80 | 15.87 |
-# | Nesting       | 40              | 75.95     | 46.51 | 33.51 | 29.41 | 19.74 | 15.83 |
-# | 3             | 50              | 75.00     | 46.15 | 33.33 | 29.27 | 19.67 | 15.79 |
-# | 4             | 60              | 74.07     | 45.80 | 33.14 | 29.13 | 19.61 | 15.75 |
-# | Not Nesting   | 70              | 73.17     | 45.45 | 32.96 | 28.99 | 19.54 | 15.71 |
-# | 5             | 80              | 72.29     | 45.11 | 32.78 | 28.85 | 19.48 | 15.67 |
-# | 6             | 90              | 71.43     | 44.78 | 32.60 | 28.71 | 19.42 | 15.63 |
-# | Hatch         | 100             | 70.59     | 44.44 | 32.43 | 28.57 | 19.35 | 15.58 |
-# | 7             | 110             | 69.77     | 44.12 | 32.25 | 28.44 | 19.29 | 15.54 |
-# | 8             | 120             | 68.97     | 43.80 | 32.08 | 28.30 | 19.23 | 15.50 |
-# | Deserting     | 130             | 68.18     | 43.48 | 31.91 | 28.17 | 19.17 | 15.46 |
-# | 9             | 140             | 67.42     | 43.17 | 31.74 | 28.04 | 19.11 | 15.42 |
-
-
 async def fast_telemetry(
     pc: ProcessConfig,
     queue: asyncio.Queue,
@@ -420,7 +401,7 @@ async def fast_telemetry(
 ):
     assert pc.carrier_freq is not None, "Carrier Frequency is not set. Scan for frequencies first..."
 
-    async def _wait_for_state():
+    async def _wait_for_state() -> tuple[str | int, float, float]:
         while True:
             process_result = await queue.get()
             queue.task_done()
@@ -432,11 +413,82 @@ async def fast_telemetry(
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: Found {k=}/{v=}")
+            logger.debug(f"FT: partial state found {k=}/{v=}")
 
-    await _wait_for_state()
-    # while True:
-    #     state = await _wait_for_state()
+            return k, process_result.SNR, process_result.DBFS
+
+    cf = pc.carrier_freq
+    ch = channel(cf)
+
+    while True:
+        start_dt, end_dt = None, None
+        snrs, dbfs = [], []
+
+        # wait for first string from FT ("Mortality"/"Nesting"/"Not Nesting"/"Hatch"/"Deserting")
+        while True:
+            mode, s, d = await _wait_for_state()
+            if isinstance(mode, str):
+                snrs.append(s)
+                dbfs.append(d)
+                break
+
+        start_dt = datetime.now()
+
+        # find XX/YY digits - if it finds string instead of digit
+        # abort process and continue from beginning
+
+        try:
+            digits = []
+            for _ in range(4):
+                digit, s, d = await _wait_for_state()
+                if isinstance(digit, int):
+                    digits.append(digit)
+                    snrs.append(s)
+                    dbfs.append(d)
+                else:
+                    raise ValueError(f"Number was expected but {digit} was received.")
+        except ValueError as err:
+            logger.exception(err)
+            continue
+
+        end_dt = datetime.now()
+
+        lat, lon = pc.gps_module.get_current()
+
+        # snrs, dbfs contain at least one value (from _wait_for_start())
+        snr_min = min(snrs)
+        snr_max = max(snrs)
+        snr_mean = statistics.mean(snrs)
+
+        dbfs_min = min(dbfs)
+        dbfs_max = max(dbfs)
+        dbfs_mean = statistics.mean(dbfs)
+
+        d1 = int(f"{digits[0]}{digits[1]}")
+        d2 = int(f"{digits[2]}{digits[3]}")
+
+        logger.info(f"FT: state found {mode}-{d1}-{d2}")
+
+        r = FTResult(
+            channel=ch,
+            carrier_freq=cf,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            snr_min=snr_min,
+            snr_max=snr_max,
+            snr_mean=snr_mean,
+            dbfs_min=dbfs_min,
+            dbfs_max=dbfs_max,
+            dbfs_mean=dbfs_mean,
+            lat=lat,
+            lon=lon,
+            mode=mode,
+            d1=d1,
+            d2=d2,
+        )
+
+        for q in out_queues:
+            await q.put(r)
 
 
 async def chick_timer(
