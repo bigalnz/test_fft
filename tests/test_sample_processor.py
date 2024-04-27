@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from kiwitracker.common import ProcessConfig, ProcessResult, SampleConfig
-from kiwitracker.sample_processor import chick_timer, find_beep_frequencies
+from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
+                                          find_beep_frequencies)
 from kiwitracker.sample_reader import chunk_numpy_file, pipeline, source_file
 
 
@@ -35,6 +36,46 @@ async def test_scan(request, process_config):
 
 def _ct_signal(d1, d2, signal_bpm=48.0):
     return [20.0, *[signal_bpm] * (d1 - 1), 16.0, *[signal_bpm] * (d2 - 1), 16.0]
+
+
+@pytest.mark.asyncio
+async def test_ft_synthetic(request, process_config):
+    """
+    Test FastTelemetry syntheticaly (without the samples file)
+    """
+
+    q_in = asyncio.Queue()
+    q_out = asyncio.Queue()
+
+    ft_task = asyncio.create_task(fast_telemetry(process_config, q_in, [q_out]))
+
+    bpms_1 = [
+        78.95,  # Mortality
+        75.0,  # 3
+        67.41,  # 9
+        80.0,  # 0
+        19.29,  # 7
+    ]
+
+    for b in bpms_1:
+        r = ProcessResult(
+            date=None, channel=59, BPM=b, DBFS=1, CLIPPING=1, BEEP_DURATION=1, SNR=1, latitude=0, longitude=0
+        )
+        q_in.put_nowait(r)
+
+    await q_in.join()
+
+    data = []
+    while not q_out.empty():
+        data.append(await q_out.get())
+        q_out.task_done()
+
+    ft_task.cancel()
+
+    assert len(data) == 1
+    assert data[0].mode == "Mortality"
+    assert data[0].d1 == 39
+    assert data[0].d2 == 7
 
 
 @pytest.mark.asyncio
