@@ -30,7 +30,7 @@ async def test_scan(request, process_config):
 
     result = await find_beep_freqs_task
 
-    assert [160338981, 160708141] == result
+    assert [160338981, 160708043] == result
 
 
 @pytest.mark.asyncio

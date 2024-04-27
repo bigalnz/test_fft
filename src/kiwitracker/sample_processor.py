@@ -181,7 +181,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 # noise_floor = np.median(fft) * 5
                 # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
 
-                peaks = signal.find_peaks(fft, prominence=0.3)[0]
+                peaks = signal.find_peaks(fft, prominence=0.01)[0]
                 beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
 
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
