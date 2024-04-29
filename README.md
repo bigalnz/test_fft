@@ -33,16 +33,18 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
 - [X] Add samples for testing purposes (weak signals, signals on ch00 and ch99, multiple signals, signals at 30, 48, 80 bpm, CT signals)
 - [X] In sample_processor handle edge case where chunk edge goes through middle of a beep (falling edge array is empty). Add Boolean 'no_falling_edge' and track number of high samples for calculation of `BEEP_DURATION` on next set of chunks.
 - [X] Lower threshold to more suitable value - from 0.9 to ?
-- [ ] Test performance on Rpi4
+- [X] Test performance on Rpi4
 - [ ] Add sample signal on Ch00 and Ch99 for Nyquist edge test
 - [ ] Add sample signal for 30BPM (incubation mode)
 - [X] Add validation (1) background BPM output with tolerance +/- 1? `[expected for expected in [80, 46, 47, 48, 30] if abs(actual - expected) < 1]` and (2) BEEP_DURATION must be 0.017 sec
 - [X] Processing of CT signals - start with a data class for CT and then CT detection (3 second pause in gap between beeps, i.e. rising_edges)
 - [X] Add SNR output for each beep
-- [ ] How often to do a channel scan? Hourly?
-- [ ] Add option to log signals to MySQL
-- [ ] Change Fc default to closer to being between middle freqs (i.e. 160.625Mhz) if bandwidth is 1.5Mhz. Else if bandwidth is 2.048Mhz then Fc can be out of band for freqs of interest - performance question on Rpi4 / No need to deal with DC spike at Fc.
-- [ ] Scan and Log CT signals daily.
+- [ ] Add option to scan at X interval, and automatically change Fc to scan whole spectrum. i.e. "--scan 1" - scan once per hour "--scan 0.1" scan every 6 minutes, "--scan 24"" scan daily
+- [ ] Add option to set an array of carriers --carrier [160707800, 160338000, .... ] (max 6 freqs)
+- [ ] Add option to support both RTLSDR and SDRPlay devices "--device airspyhf" , "--device rtlsdr"
+- [X] Add option to log signals to MySQL
+- [X] Change Fc default to closer to being between middle freqs (i.e. 160.625Mhz) if bandwidth is 1.5Mhz. Else if bandwidth is 2.048Mhz then Fc can be out of band for freqs of interest - performance question on Rpi4 / No need to deal with DC spike at Fc.
+- [X] Scan and Log CT signals daily - All CT signls, beeps and Fast Telemetry logged to seperate databases in SQLite.
 
 ## Sample Array Files
 
