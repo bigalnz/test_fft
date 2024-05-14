@@ -98,8 +98,8 @@ kiwitracker --help
 Which should display the following:
 
 ```bash
-usage: kiwitracker [-h] [-f INFILE] [-db DB] [-d] [-o OUTFILE] [-m MAX_SAMPLES] [--scan] [--no-use-gps] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--bias-tee] [-log LOGLEVEL]
-                   [--carrier [CARRIER]]
+usage: kiwitracker [-h] [-f INFILE] [-db DB] [-d] [-o OUTFILE] [-m MAX_SAMPLES] [--scan] [--no-use-gps] [--radio [{rtl,airspy}]] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN]
+                   [--bias-tee] [-log LOGLEVEL] [--carrier [CARRIER]]
 
 options:
   -h, --help            show this help message and exit
@@ -115,6 +115,8 @@ options:
                         Number of samples to read when "-o/--outfile" is specified
   --scan                Scan for frequencies in first 3sec
   --no-use-gps          Set this flag to not use GPS module
+  --radio [{rtl,airspy}]
+                        type of radio to be used (default: rtl), ignored if reading samples from disk.
 
 Sampling:
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
@@ -130,4 +132,5 @@ Sampling:
 
 Processing:
   --carrier [CARRIER]   Carrier frequency to process (default: None)
+
 ```
