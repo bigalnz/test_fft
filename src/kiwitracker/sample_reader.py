@@ -484,7 +484,7 @@ async def source_file(
 
 
 async def source_radio(
-    reader: "SampleReader",
+    reader,
     buffer: SampleBuffer,
     num_samples_to_process: int,
 ) -> AsyncIterator[np.ndarray]:

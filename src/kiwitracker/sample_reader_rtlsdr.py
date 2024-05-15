@@ -25,7 +25,7 @@ class SampleReaderRtlSdr:
 
     aio_qsize: int = 100
 
-    def __init__(self, sample_config: SampleConfig, buffer: "SampleBuffer" | None = None):
+    def __init__(self, sample_config: SampleConfig, buffer=None):
         self.sample_config = sample_config
         self._buffer = buffer
         self._running_sync = False
@@ -65,11 +65,11 @@ class SampleReaderRtlSdr:
         return [v / 10 for v in self.sdr.gain_values]
 
     @property
-    def buffer(self) -> "SampleBuffer" | None:
+    def buffer(self):
         return self._buffer
 
     @buffer.setter
-    def buffer(self, value: "SampleBuffer" | None):
+    def buffer(self, value):
         if value is self._buffer:
             return
         if self._aio_streaming:
