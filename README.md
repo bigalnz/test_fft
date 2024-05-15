@@ -41,7 +41,7 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
 - [X] Add SNR output for each beep
 - [ ] Add option to scan at X interval, and automatically change Fc to scan whole spectrum. i.e. "--scan 1" - scan once per hour "--scan 0.1" scan every 6 minutes, "--scan 24"" scan daily
 - [ ] Add option to set an array of carriers --carrier [160707800, 160338000, .... ] (max 6 freqs)
-- [ ] Add option to support both RTLSDR and SDRPlay devices "--device airspyhf" , "--device rtlsdr"
+- [X] Add option to support both RTLSDR and SDRPlay devices "--radio airspy" , "--radio rtl"
 - [X] Add option to log signals to MySQL
 - [X] Change Fc default to closer to being between middle freqs (i.e. 160.625Mhz) if bandwidth is 1.5Mhz. Else if bandwidth is 2.048Mhz then Fc can be out of band for freqs of interest - performance question on Rpi4 / No need to deal with DC spike at Fc.
 - [X] Scan and Log CT signals daily - All CT signls, beeps and Fast Telemetry logged to seperate databases in SQLite.
