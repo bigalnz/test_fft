@@ -62,7 +62,7 @@ def get_version():
     # GET VERSION NUMBERS
     ver = VER()  # new instance of struct
     clibrary.airspyhf_lib_version(ctypes.byref(ver))  # pass it in, using byref as the instance of ver will be filled
-    print(f" Ver : {ver.major}.{ver.minor}.{ver.rev}")  # print the result. No idea why contents didnt work
+    # print(f" Ver : {ver.major}.{ver.minor}.{ver.rev}")  # print the result. No idea why contents didnt work
     return ver
 
 
@@ -70,8 +70,8 @@ def get_serial():
     # GET SERIAL NUMBER
     serial = numpy.zeros(1, dtype="uint64")
     devices = clibrary.airspyhf_list_devices(serial.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64)), 1)
-    print(f" Number of devices is {devices}")
-    print(hex(serial[0]))  # 0xdc52978027444a4d
+    # print(f" Number of devices is {devices}")
+    # print(hex(serial[0]))  # 0xdc52978027444a4d
     return serial[0]
 
 
@@ -80,7 +80,7 @@ def open_device(serial):
     device_handle = ctypes.c_void_p(0)
     sn = ctypes.c_uint64(serial)
     status = clibrary.airspyhf_open_sn(ctypes.byref(device_handle), sn)
-    print(status)
+    # print(status)
     return device_handle
 
 
@@ -88,28 +88,44 @@ def get_sample_rates(device_handle):
     # GET NUM SAMP RATES
     how_many_sample_rates = ctypes.c_uint32(0)
     status = clibrary.airspyhf_get_samplerates(device_handle, ctypes.byref(how_many_sample_rates), ctypes.c_uint32(0))
-    print("Status =", status, "how_many_sample_rates =", how_many_sample_rates)
+    # print("Status =", status, "how_many_sample_rates =", how_many_sample_rates)
     num_rates = how_many_sample_rates.value
     # GET SAMP RATES
     rates = numpy.zeros(num_rates, dtype="uint32")
     status = clibrary.airspyhf_get_samplerates(
         device_handle, rates.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)), ctypes.c_uint32(num_rates)
     )
-    print("Status =", status, "rates =", rates)
+    # print("Status =", status, "rates =", rates)
     return rates
 
 
 def set_freq(device_handle, freq):
     # device, const uint32 freq_hz
     status = clibrary.airspyhf_set_freq(device_handle, ctypes.c_uint32(freq))
-    print("Set Freq Status =", status)
+    # print("Set Freq Status =", status)
     return status
 
 
 def set_sample_rate(device_handle, rate):
     status = clibrary.airspyhf_set_samplerate(device_handle, ctypes.c_uint32(rate))
-    print("Set Rate Status =", status)
+    # print("Set Rate Status =", status)
     return status
+
+
+def start_sampling(device_handle, callback_fn):
+
+    @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
+    def rx_callback(transfer):
+        # print("SAMPLE COUNT =", transfer.contents.samples_count)
+        # print("SAMPLES = ", transfer.contents.samples)
+        complex_data = numpy.ctypeslib.as_array(
+            transfer.contents.samples, shape=(transfer.contents.samples_count, 2)
+        ).view("complex64")
+        # print(complex_data)
+        callback_fn(complex_data)
+        return 0
+
+    clibrary.airspyhf_start(device_handle, rx_callback, None)
 
 
 if __name__ == "__main__":

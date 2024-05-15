@@ -4,7 +4,8 @@ import argparse
 import asyncio
 import logging
 import os
-from typing import AsyncIterator
+from types import FunctionType
+from typing import AsyncIterator, Callable
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -17,7 +18,6 @@ from kiwitracker.db.models import BPM, ChickTimerResult, FastTelemetryResult
 from kiwitracker.exceptions import CarrierFrequencyNotFound
 from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
-from kiwitracker.sample_buffer import SampleBuffer
 from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
                                           process_sample)
@@ -218,25 +218,44 @@ def main():
         return
     else:
         if args.radio == "rtl":
+            from kiwitracker.sample_buffer import SampleBuffer
             from kiwitracker.sample_reader_rtlsdr import \
                 SampleReaderRtlSdr as SampleReader
+
+            process_config.running_mode = "radio"
+            asyncio.run(
+                pipeline(
+                    process_config=process_config,
+                    source_gen=source_radio(
+                        reader=SampleReader(sample_config),
+                        buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
+                        num_samples_to_process=process_config.num_samples_to_process,
+                    ),
+                    task_results=results_pipeline,
+                )
+            )
+
         elif args.radio == "airspy":
-            raise ValueError("airspy radio not implemented yet.")
+            from kiwitracker.sample_reader_airspy import \
+                BufferAirspy as SampleBuffer
+            from kiwitracker.sample_reader_airspy import \
+                SampleReaderAirspy as SampleReader
+
+            process_config.running_mode = "radio"
+            asyncio.run(
+                pipeline(
+                    process_config=process_config,
+                    source_gen=source_radio(
+                        reader=lambda loop: SampleReader(sample_config, loop),
+                        buffer=SampleBuffer(),
+                        num_samples_to_process=process_config.num_samples_to_process,
+                    ),
+                    task_results=results_pipeline,
+                )
+            )
+
         else:
             raise ValueError(f"Unknown radio value: {args.radio}")
-
-        process_config.running_mode = "radio"
-        asyncio.run(
-            pipeline(
-                process_config=process_config,
-                source_gen=source_radio(
-                    reader=SampleReader(sample_config),
-                    buffer=SampleBuffer(maxsize=process_config.num_samples_to_process * 3),
-                    num_samples_to_process=process_config.num_samples_to_process,
-                ),
-                task_results=results_pipeline,
-            )
-        )
 
     # asyncio.run(run_main_2(sample_config=sample_config, process_config=process_config))
 
@@ -485,7 +504,7 @@ async def source_file(
 
 async def source_radio(
     reader,
-    buffer: SampleBuffer,
+    buffer,
     num_samples_to_process: int,
 ) -> AsyncIterator[np.ndarray]:
     """
@@ -493,6 +512,9 @@ async def source_radio(
     buffer                  -> where to put samples from the radio
     num_samples_to_process  -> number of samples in one chunk
     """
+
+    if isinstance(reader, FunctionType):
+        reader = reader(asyncio.get_running_loop())
 
     reader.buffer = buffer
     async with reader:
