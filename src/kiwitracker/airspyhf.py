@@ -1,6 +1,6 @@
 import ctypes
-import logging
 import time
+from logging import getLogger
 
 import numpy
 
@@ -11,7 +11,7 @@ https://github.com/airspy/airspyhf
 
 """
 
-logger = logging.getLogger("KiwiTracker")
+logger = getLogger("KiwiTracker")
 
 
 class VER(ctypes.Structure):
@@ -115,22 +115,24 @@ def set_sample_rate(device_handle, rate):
     return status
 
 
+@ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
+def _rx_callback(transfer):
+    logger.debug(f"rx_callback called! {transfer.contents.samples_count=} {transfer.contents.samples=}")
+
+    # print("SAMPLE COUNT =", transfer.contents.samples_count)
+    # print("SAMPLES = ", transfer.contents.samples)
+    complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
+        "complex64"
+    )
+    # print(complex_data)
+    callback_fn = ctypes.cast(transfer.ctx, ctypes.py_object).value
+    callback_fn(complex_data)
+
+    return 0
+
+
 def start_sampling(device_handle, callback_fn):
-
-    @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
-    def rx_callback(transfer):
-        logger.debug(f"rx_callback called! {transfer.contents.samples_count=} {transfer.contents.samples=}")
-
-        # print("SAMPLE COUNT =", transfer.contents.samples_count)
-        # print("SAMPLES = ", transfer.contents.samples)
-        complex_data = numpy.ctypeslib.as_array(
-            transfer.contents.samples, shape=(transfer.contents.samples_count, 2)
-        ).view("complex64")
-        # print(complex_data)
-        callback_fn(complex_data)
-        return 0
-
-    clibrary.airspyhf_start(device_handle, rx_callback, None)
+    clibrary.airspyhf_start(device_handle, _rx_callback, ctypes.py_object(callback_fn))
 
 
 if __name__ == "__main__":
