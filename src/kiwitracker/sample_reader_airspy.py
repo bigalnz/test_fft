@@ -37,6 +37,10 @@ class SampleReaderAirspy:
         assert self.buffer is not None
         assert self.aio_loop is not None
 
+        await asyncio.sleep(0.01)
+
+    async def __aenter__(self):
+
         def sync_with_main_thread(complex_data):
             self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, complex_data.copy())
 
@@ -49,3 +53,8 @@ class SampleReaderAirspy:
         airspy.start_sampling(self.device_handle, sync_with_main_thread)
 
         await asyncio.sleep(0.01)
+
+        return self
+
+    async def __aexit__(self, *args):
+        pass
