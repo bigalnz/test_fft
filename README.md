@@ -116,7 +116,7 @@ options:
   --scan                Scan for frequencies in first 3sec
   --no-use-gps          Set this flag to not use GPS module
   --radio [{rtl,airspy}]
-                        type of radio to be used (default: rtl), ignored if reading samples from disk.
+                        type of radio to be used (default: rtl), ignored if reading samples from disk. Airspy has max sample rate of 768000. Needs to be used with -s 768000.
 
 Sampling:
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
