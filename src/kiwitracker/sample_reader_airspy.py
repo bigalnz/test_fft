@@ -33,10 +33,6 @@ class SampleReaderAirspy:
         self.aio_loop = loop
 
     async def open_stream(self):
-        assert self.device_handle is None
-        assert self.buffer is not None
-        assert self.aio_loop is not None
-
         await asyncio.sleep(0.01)
 
     async def __aenter__(self):
@@ -49,6 +45,10 @@ class SampleReaderAirspy:
         rates = airspy.get_sample_rates(self.device_handle)
         airspy.set_freq(self.device_handle, self.sc.center_freq)
         airspy.set_sample_rate(self.device_handle, rates[0])
+
+        assert self.device_handle is None
+        assert self.buffer is not None
+        assert self.aio_loop is not None
 
         airspy.start_sampling(self.device_handle, sync_with_main_thread)
 
