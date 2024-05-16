@@ -79,7 +79,7 @@ def main():
         default="rtl",
         const="rtl",
         nargs="?",
-        choices=["rtl", "airspy"],
+        choices=["rtl", "airspy", "dummy"],
         help="type of radio to be used (default: %(default)s), ignored if reading samples from disk.",
     )
 
@@ -246,7 +246,27 @@ def main():
                 pipeline(
                     process_config=process_config,
                     source_gen=source_radio(
-                        reader=lambda loop: SampleReader(sample_config, loop),
+                        reader=SampleReader(sample_config),
+                        buffer=SampleBuffer(),
+                        num_samples_to_process=process_config.num_samples_to_process,
+                    ),
+                    task_results=results_pipeline,
+                )
+            )
+
+        elif args.radio == "dummy":
+
+            from kiwitracker.sample_reader_dummy import \
+                BufferDummy as SampleBuffer
+            from kiwitracker.sample_reader_dummy import \
+                SampleReaderDummy as SampleReader
+
+            process_config.running_mode = "radio"
+            asyncio.run(
+                pipeline(
+                    process_config=process_config,
+                    source_gen=source_radio(
+                        reader=SampleReader(sample_config),
                         buffer=SampleBuffer(),
                         num_samples_to_process=process_config.num_samples_to_process,
                     ),
@@ -514,7 +534,7 @@ async def source_radio(
     """
 
     if isinstance(reader, FunctionType):
-        reader = reader(asyncio.get_running_loop())
+        reader = reader()
 
     reader.buffer = buffer
     async with reader:
