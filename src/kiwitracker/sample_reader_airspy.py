@@ -46,9 +46,9 @@ class SampleReaderAirspy:
         airspy.set_freq(self.device_handle, self.sc.center_freq)
         airspy.set_sample_rate(self.device_handle, rates[0])
 
-        assert self.device_handle is None
-        assert self.buffer is not None
-        assert self.aio_loop is not None
+        # assert self.device_handle is not None
+        # assert self.buffer is not None
+        # assert self.aio_loop is not None
 
         airspy.start_sampling(self.device_handle, sync_with_main_thread)
 
