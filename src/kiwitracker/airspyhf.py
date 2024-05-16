@@ -101,13 +101,13 @@ def get_sample_rates(device_handle):
 
 def set_freq(device_handle, freq):
     # device, const uint32 freq_hz
-    status = clibrary.airspyhf_set_freq(device_handle, ctypes.c_uint32(freq))
+    status = clibrary.airspyhf_set_freq(device_handle, ctypes.c_uint32(int(freq)))
     # print("Set Freq Status =", status)
     return status
 
 
 def set_sample_rate(device_handle, rate):
-    status = clibrary.airspyhf_set_samplerate(device_handle, ctypes.c_uint32(rate))
+    status = clibrary.airspyhf_set_samplerate(device_handle, ctypes.c_uint32(int(rate)))
     # print("Set Rate Status =", status)
     return status
 
