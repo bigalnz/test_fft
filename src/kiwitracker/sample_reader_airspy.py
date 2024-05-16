@@ -53,6 +53,8 @@ class SampleReaderAirspy:
     async def __aenter__(self):
 
         def sync_with_main_thread(complex_data):
+            logger.debug(f"{complex_data} received!")
+
             future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.copy()), self.aio_loop)
 
             try:
@@ -73,6 +75,8 @@ class SampleReaderAirspy:
         logger.debug(f"Sample rate {rates[0]} set, {status=}")
 
         airspy.start_sampling(self.device_handle, sync_with_main_thread)
+
+        logger.debug(f"Sampling started!")
 
         await asyncio.sleep(0.01)
 

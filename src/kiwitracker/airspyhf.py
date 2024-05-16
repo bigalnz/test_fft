@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import time
 
 import numpy
@@ -9,6 +10,8 @@ Python Wrapper to use airspyhf user mode driver
 https://github.com/airspy/airspyhf
 
 """
+
+logger = logging.getLogger("KiwiTracker")
 
 
 class VER(ctypes.Structure):
@@ -116,6 +119,8 @@ def start_sampling(device_handle, callback_fn):
 
     @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
     def rx_callback(transfer):
+        logger.debug(f"rx_callback called! {transfer.contents.samples_count=} {transfer.contents.samples=}")
+
         # print("SAMPLE COUNT =", transfer.contents.samples_count)
         # print("SAMPLES = ", transfer.contents.samples)
         complex_data = numpy.ctypeslib.as_array(
