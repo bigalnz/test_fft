@@ -117,22 +117,23 @@ def set_sample_rate(device_handle, rate):
 
 @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
 def _rx_callback(transfer):
-    logger.debug(f"rx_callback called! {transfer.contents.samples_count=} {transfer.contents.samples=}")
-
-    # print("SAMPLE COUNT =", transfer.contents.samples_count)
-    # print("SAMPLES = ", transfer.contents.samples)
     complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
         "complex64"
     )
-    # print(complex_data)
-    callback_fn = ctypes.cast(transfer.ctx, ctypes.py_object).value
+    callback_fn = ctypes.cast(transfer.contents.ctx, ctypes.POINTER(ctypes.py_object)).contents.value
     callback_fn(complex_data)
 
     return 0
 
 
+_pointers_to_callbacks = []  # prevent garbage-collect ctypes.pointer to callback_fns
+
+
 def start_sampling(device_handle, callback_fn):
-    clibrary.airspyhf_start(device_handle, _rx_callback, ctypes.py_object(callback_fn))
+    ppyo = ctypes.pointer(ctypes.py_object(callback_fn))
+    _pointers_to_callbacks.append(ppyo)
+
+    clibrary.airspyhf_start(device_handle, _rx_callback, ctypes.cast(ppyo, ctypes.c_void_p))
 
 
 if __name__ == "__main__":

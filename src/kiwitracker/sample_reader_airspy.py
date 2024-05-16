@@ -55,7 +55,7 @@ class SampleReaderAirspy:
         def sync_with_main_thread(complex_data):
             logger.debug(f"{complex_data} received!")
 
-            future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.copy()), self.aio_loop)
+            future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.ravel()), self.aio_loop)
 
             try:
                 future.result(1)
