@@ -74,6 +74,8 @@ class SampleReaderAirspy:
         status = airspy.set_sample_rate(self.device_handle, rates[0])
         logger.debug(f"Sample rate {rates[0]} set, {status=}")
 
+        airspy.set_default_options(self.device_handle)
+
         airspy.start_sampling(self.device_handle, sync_with_main_thread)
 
         logger.debug(f"Sampling started!")

@@ -115,6 +115,12 @@ def set_sample_rate(device_handle, rate):
     return status
 
 
+def set_default_options(device_handle):
+    clibrary.airspyhf_set_hf_lna(device_handle, ctypes.c_uint8(1))  # LNA on
+    clibrary.airspyhf_set_hf_agc(device_handle, ctypes.c_uint8(0))  # AGC off
+    clibrary.airspyhf_set_hf_att(device_handle, ctypes.c_uint8(0))  # ATT 0
+
+
 @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
 def _rx_callback(transfer):
     complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
