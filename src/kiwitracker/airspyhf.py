@@ -28,7 +28,7 @@ class AirspyHfTransfer(ctypes.Structure):
         ("ctx", ctypes.c_void_p),
         ("samples", ctypes.POINTER(ctypes.c_float)),
         ("samples_count", ctypes.c_int),
-        ("dropped", ctypes.c_uint64),
+        ("dropped_samples", ctypes.c_uint64),
     ]
 
 
@@ -118,11 +118,16 @@ def set_sample_rate(device_handle, rate):
 def set_default_options(device_handle):
     clibrary.airspyhf_set_hf_lna(device_handle, ctypes.c_uint8(1))  # LNA on
     clibrary.airspyhf_set_hf_agc(device_handle, ctypes.c_uint8(0))  # AGC off
+
+    clibrary.airspyhf_set_att(device_handle, ctypes.c_float(0.0))  # ATT 0
     clibrary.airspyhf_set_hf_att(device_handle, ctypes.c_uint8(0))  # ATT 0
 
 
 @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(AirspyHfTransfer))
 def _rx_callback(transfer):
+    if transfer.contents.dropped_samples > 0:
+        logger.error(f"Dropped samples {transfer.contents.dropped_samples}")
+
     complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
         "complex64"
     )
