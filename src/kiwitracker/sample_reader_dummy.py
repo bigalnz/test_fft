@@ -12,7 +12,7 @@ logger = logging.getLogger("KiwiTracker")
 
 class BufferDummy:
     def __init__(self):
-        self.input_queue = asyncio.Queue(3)  # max 3 samples in the queue
+        self.input_queue = asyncio.Queue()  # max 3 samples in the queue
         self.samples = np.zeros(0, dtype="complex64")
 
     async def get(self, count):
@@ -52,15 +52,20 @@ class SampleReaderDummy:
         def run_in_thread():
             arr = np.zeros(250_000 // 4, dtype="complex64")
 
+            # while True:
+            #     future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(arr.copy()), self.aio_loop)
+
+            #     try:
+            #         future.result(1)
+            #     except asyncio.TimeoutError:
+            #         logger.error("Timeout putting samples to queue, cancelling!")
+            #         future.cancel()
+
+            #     logger.debug(f"Added array of size={len(arr)} to to queue.")
+
             while True:
-                future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(arr.copy()), self.aio_loop)
-
-                try:
-                    future.result(1)
-                except asyncio.TimeoutError:
-                    logger.error("Timeout putting samples to queue, cancelling!")
-                    future.cancel()
-
+                self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, arr.flatten())
+                time.sleep(0.01)
                 logger.debug(f"Added array of size={len(arr)} to to queue.")
 
         self.thread = threading.Thread(

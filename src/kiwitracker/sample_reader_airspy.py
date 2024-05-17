@@ -53,15 +53,16 @@ class SampleReaderAirspy:
     async def __aenter__(self):
 
         def sync_with_main_thread(complex_data):
-            logger.debug(f"{complex_data} received!")
+            # logger.debug(f"{complex_data} received!")
 
-            future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.ravel()), self.aio_loop)
+            # future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.ravel()), self.aio_loop)
 
-            try:
-                future.result(1)
-            except asyncio.TimeoutError:
-                logger.error("Timeout putting samples to queue, cancelling!")
-                future.cancel()
+            # try:
+            #     future.result(1)
+            # except asyncio.TimeoutError:
+            #     logger.error("Timeout putting samples to queue, cancelling!")
+            #     future.cancel()
+            self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, complex_data.flatten())
 
         sn = airspy.get_serial()
         logger.debug(f"Serial Number: {sn}")
