@@ -72,8 +72,9 @@ class SampleReaderAirspy:
         logger.debug(f"Rates: {rates}")
         status = airspy.set_freq(self.device_handle, self.sc.center_freq)
         logger.debug(f"Frequency {self.sc.center_freq} set, {status=}")
-        status = airspy.set_sample_rate(self.device_handle, rates[0])
+        status = airspy.set_sample_rate(self.device_handle, int(self.sc.sample_rate))
         logger.debug(f"Sample rate {rates[0]} set, {status=}")
+        assert status == 0
 
         airspy.set_default_options(self.device_handle)
 
