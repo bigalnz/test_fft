@@ -33,6 +33,9 @@ class SampleConfig:
     location: str = "Ponui"
     """Set population location"""
 
+    scan_interval: int | None = None
+    """Scan interval in minutes"""
+
 
 @dataclass
 class ProcessConfig:
@@ -72,9 +75,6 @@ class ProcessConfig:
     def fft_size(self, beep_duration=0.017) -> int:
         # this makes sure there's at least 1 full chunk within each beep
         return int(beep_duration * self.sample_rate / 2)
-
-    scan: bool = False
-    """Enable signal scanning"""
 
 
 @dataclass

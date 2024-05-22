@@ -420,11 +420,11 @@ async def fast_telemetry(
             try:
                 normalized_bpm = normalize_bpm(process_result.BPM)
             except ValueError as err:
-                logger.exception(err)
+                logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] fast_telemetry._wait_for_state(): {err}")
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: partial state found {k=}/{v=}")
+            logger.debug(f"FT: [{channel(pc.carrier_freq)}/{pc.carrier_freq}] partial state found {k=}/{v=}")
 
             return k, process_result.SNR, process_result.DBFS
 
@@ -478,7 +478,7 @@ async def fast_telemetry(
         d1 = int(f"{digits[0]}{digits[1]}")
         d2 = int(f"{digits[2]}{digits[3]}")
 
-        logger.info(f"FT: state found {mode}-{d1}-{d2}")
+        logger.info(f"FT: [{channel(pc.carrier_freq)}/{pc.carrier_freq}] state found {mode}-{d1}-{d2}")
 
         r = FTResult(
             channel=ch,
@@ -526,7 +526,8 @@ async def chick_timer(
                     return
 
             except ValueError as err:
-                logger.exception(err)
+                # logger.exception(err)
+                logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer._wait_for_start(): {err}")
 
     async def _wait_specific_num_of_beeps(num: int) -> None:
         while num > 0:
@@ -611,7 +612,8 @@ async def chick_timer(
         except ChickTimerProcessingError as err:
             logger.exception(err)
         except ValueError as err:
-            logger.exception(err)
+            logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
+            # logger.exception(err)
 
         end_dt = datetime.now()
 

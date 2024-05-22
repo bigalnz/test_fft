@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
+from copy import deepcopy
 from types import FunctionType
 from typing import AsyncIterator, Callable
 
@@ -181,6 +182,7 @@ def main():
         gain=args.gain,
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
+        scan_interval=args.scan,
     )
 
     process_config = ProcessConfig(
@@ -587,6 +589,94 @@ async def scan_for_frequencies(
         raise
 
 
+async def queue_to_iterator(q: asyncio.Queue):
+    while True:
+        obj = await q.get()
+        q.task_done()
+        yield obj
+
+
+async def scan_frequencies_background(
+    input_queue: asyncio.Queue,
+    signal_scanning_event: asyncio.Event,
+    process_config: ProcessConfig,
+):
+    process_config = deepcopy(process_config)
+    process_config.carrier_freq = None
+
+    if process_config.sample_config.scan_interval is None or process_config.sample_config.scan_interval == 0:
+        logger.info("Background scan interval task is disabled.")
+        while True:
+            await asyncio.sleep(3600)
+
+    minutes = process_config.sample_config.scan_interval
+
+    while True:
+        logger.info(f"scan_interval_task start sleeping for {minutes * 60} seconds...")
+        await asyncio.sleep(minutes * 60)
+        logger.info("scan_interval_task woke up, start scanning...")
+
+        # signal that we want to receive samples
+        signal_scanning_event.set()
+
+        try:
+            frequencies = await scan_for_frequencies(queue_to_iterator(input_queue), process_config)
+            logger.info(f"frequencies found {frequencies=}")
+        except CarrierFrequencyNotFound:
+            logger.info("No frequencies found, using old ones.")
+
+        # we're done with receiving samples
+        signal_scanning_event.clear()
+
+        # clear leftover samples in queue
+        while not input_queue.empty():
+            _ = await input_queue.get()
+            input_queue.task_done()
+
+
+def create_structures_from_frequencies(
+    frequencies: list[float],
+    pc: ProcessConfig,
+    executor: ProcessPoolExecutor,
+    task_results,
+):
+    # for each detected/defined frequency we create two tasks:
+    # - task for processing sample
+    # - task for handling processed sample (detected BPM.)
+    #
+    # for each `processing sample task` we create `process queue` and `result_queue`
+    # so we can distribute samples from task_samples_source() to each `process queue`
+    # `processing sample task` will put detected BPMs to `result_queue` for further handling.
+    process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
+    # for i, pc in enumerate(process_config, 1):
+    for i, f in enumerate(frequencies, 1):
+        logger.debug(f"Creating sample process task and results task no.{i}, frequency={f}")
+
+        p = deepcopy(pc)
+        p.carrier_freq = f
+
+        result_queue = asyncio.Queue()
+        process_queue = asyncio.Queue()
+
+        task_sample_processor = asyncio.create_task(
+            process_sample(
+                p,
+                executor,
+                process_queue,
+                [result_queue],
+            )
+        )
+        task_result = asyncio.create_task(task_results(p, result_queue))
+
+        process_queues.add(process_queue)
+        result_queues.add(result_queue)
+
+        process_tasks.add(task_sample_processor)
+        result_tasks.add(task_result)
+
+    return process_queues, result_queues, process_tasks, result_tasks
+
+
 async def pipeline(
     process_config: list[ProcessConfig] | ProcessConfig,
     source_gen: AsyncIterator[np.ndarray],
@@ -617,56 +707,82 @@ async def pipeline(
             frequencies = await scan_for_frequencies(source_gen, process_config)
 
             # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
-            logger.info(f"Picking first one: {frequencies[0]}")
-            process_config.carrier_freq = frequencies[0]
-            process_config = [process_config]
+            # logger.info(f"Picking first one: {frequencies[0]}")
+            # process_config.carrier_freq = frequencies[0]
+            # process_config.carrier_freq = 160270968
+            # process_config = [process_config]
         case ProcessConfig():
             # fully defined ProcessConfig (with carrier_freq)
-            process_config = [process_config]
+            # process_config = [process_config]
+            frequencies = [process_config.carrier_freq]
         case _:
             raise ValueError(f"Type of process_config {type(process_config)} not understood.")
 
+    # setup background scanning:
+    bg_scan_interval_input_queue = asyncio.Queue()
+    bg_scan_interval_event = asyncio.Event()
+
+    task_scan_interval = asyncio.create_task(
+        scan_frequencies_background(
+            bg_scan_interval_input_queue,
+            bg_scan_interval_event,
+            process_config,
+        )
+    )
+
     with ProcessPoolExecutor(max_workers=4) as executor:
-        # for each detected/defined frequency we create two tasks:
-        # - task for processing sample
-        # - task for handling processed sample (detected BPM.)
-        #
-        # for each `processing sample task` we create `process queue` and `result_queue`
-        # so we can distribute samples from task_samples_source() to each `process queue`
-        # `processing sample task` will put detected BPMs to `result_queue` for further handling.
-        process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
-        for i, pc in enumerate(process_config, 1):
-            logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
-            result_queue = asyncio.Queue()
-            process_queue = asyncio.Queue()
+        process_queues, result_queues, process_tasks, result_tasks = create_structures_from_frequencies(
+            frequencies,
+            process_config,
+            executor,
+            task_results,
+        )
 
-            task_sample_processor = asyncio.create_task(
-                process_sample(
-                    pc,
-                    executor,
-                    process_queue,
-                    [result_queue],
-                )
-            )
-            task_result = asyncio.create_task(task_results(pc, result_queue))
+        # # for each detected/defined frequency we create two tasks:
+        # # - task for processing sample
+        # # - task for handling processed sample (detected BPM.)
+        # #
+        # # for each `processing sample task` we create `process queue` and `result_queue`
+        # # so we can distribute samples from task_samples_source() to each `process queue`
+        # # `processing sample task` will put detected BPMs to `result_queue` for further handling.
+        # process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
+        # for i, pc in enumerate(process_config, 1):
+        #     logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
+        #     result_queue = asyncio.Queue()
+        #     process_queue = asyncio.Queue()
 
-            process_queues.add(process_queue)
-            result_queues.add(result_queue)
+        #     task_sample_processor = asyncio.create_task(
+        #         process_sample(
+        #             pc,
+        #             executor,
+        #             process_queue,
+        #             [result_queue],
+        #         )
+        #     )
+        #     task_result = asyncio.create_task(task_results(pc, result_queue))
 
-            process_tasks.add(task_sample_processor)
-            result_tasks.add(task_result)
+        #     process_queues.add(process_queue)
+        #     result_queues.add(result_queue)
+
+        #     process_tasks.add(task_sample_processor)
+        #     result_tasks.add(task_result)
 
         # distribute samples to all process queues:
         async for sample in source_gen:
             for pq in process_queues:
                 await pq.put(sample)
 
+            # is background scanning active?
+            # If yes, put sample to the scan_frequncies queue...
+            if bg_scan_interval_event.is_set():
+                await bg_scan_interval_input_queue.put(sample)
+
         # wait for processing:
-        for pq in [*process_queues, *result_queues]:
+        for pq in [*process_queues, *result_queues, bg_scan_interval_input_queue]:
             await pq.join()
 
         # cancel all tasks:
-        for t in [*process_tasks, *result_tasks]:
+        for t in [*process_tasks, *result_tasks, task_scan_interval]:
             t.cancel()
 
 
