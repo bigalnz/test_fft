@@ -66,8 +66,10 @@ def main():
     p.add_argument(
         "--scan",
         dest="scan",
-        action="store_true",
-        help="Scan for frequencies in first 3sec",
+        type=int,
+        nargs="?",
+        const=0,
+        help="Scan periodically for frequencies 0-240 (in minutes, default: %(default)s). 0 means scan only upon startup, cannot be used with --carrier flag",
     )
     p.add_argument(
         "--no-use-gps",
@@ -156,11 +158,15 @@ def main():
 
     migrate_if_needed(engine, "head")
 
-    if args.scan and args.carrier is not None:
-        print("--scan and --carrier cannot be provided simultaneously.")
+    if args.scan is not None and args.carrier is not None:
+        logger.error("--scan and --carrier cannot be used simultaneously.")
         return
-    elif not args.scan and args.carrier is None:
+    elif args.scan is None and args.carrier is None:
         args.carrier_freq = ProcessConfig.carrier_freq
+
+    if args.scan is not None and not 0 <= args.scan <= 240:
+        logger.error(f"Scan interval outside valid range 0-240: ({args.scan})")
+        return
 
     if args.no_use_gps:
         gps_module = GPSDummy()
