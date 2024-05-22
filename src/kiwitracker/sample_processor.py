@@ -5,6 +5,7 @@ import itertools
 import logging
 import math
 import statistics
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from functools import lru_cache
 from typing import AsyncIterator
@@ -202,6 +203,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
 
 async def process_sample(
     pc: ProcessConfig,
+    executor: ProcessPoolExecutor,
     samples_queue: asyncio.Queue,
     out_queues: list[asyncio.Queue],
 ) -> None:
@@ -231,6 +233,8 @@ async def process_sample(
 
     logger.info(f"Processing for channel={ch}/carrier_freq={pc.carrier_freq} started...")
 
+    loop = asyncio.get_running_loop()
+
     while True:
         samples = await samples_queue.get()
 
@@ -243,7 +247,14 @@ async def process_sample(
         tot_samp_count = tot_samp_count + len(samples)
 
         # print(f"Received sample: {samples.size}")
-        samples, sample_rate, unsmoothed_samples = decimate_samples(samples, previous_samples, pc)
+        fut = loop.run_in_executor(
+            executor,
+            decimate_samples,
+            samples,
+            previous_samples,
+            pc,
+        )
+        samples, sample_rate, unsmoothed_samples = await fut
         previous_samples = unsmoothed_samples
 
         # ... = dbc.send(samples, sample_rate)

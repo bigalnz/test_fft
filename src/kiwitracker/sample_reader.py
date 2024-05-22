@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import os
+from concurrent.futures import ProcessPoolExecutor
 from types import FunctionType
 from typing import AsyncIterator, Callable
 
@@ -619,40 +620,48 @@ async def pipeline(
         case _:
             raise ValueError(f"Type of process_config {type(process_config)} not understood.")
 
-    # for each detected/defined frequency we create two tasks:
-    # - task for processing sample
-    # - task for handling processed sample (detected BPM.)
-    #
-    # for each `processing sample task` we create `process queue` and `result_queue`
-    # so we can distribute samples from task_samples_source() to each `process queue`
-    # `processing sample task` will put detected BPMs to `result_queue` for further handling.
-    process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
-    for i, pc in enumerate(process_config, 1):
-        logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
-        result_queue = asyncio.Queue()
-        process_queue = asyncio.Queue()
+    with ProcessPoolExecutor(max_workers=4) as executor:
+        # for each detected/defined frequency we create two tasks:
+        # - task for processing sample
+        # - task for handling processed sample (detected BPM.)
+        #
+        # for each `processing sample task` we create `process queue` and `result_queue`
+        # so we can distribute samples from task_samples_source() to each `process queue`
+        # `processing sample task` will put detected BPMs to `result_queue` for further handling.
+        process_queues, result_queues, process_tasks, result_tasks = set(), set(), set(), set()
+        for i, pc in enumerate(process_config, 1):
+            logger.debug(f"Creating sample process task and results task no.{i}, {pc.carrier_freq=}")
+            result_queue = asyncio.Queue()
+            process_queue = asyncio.Queue()
 
-        task_sample_processor = asyncio.create_task(process_sample(pc, process_queue, [result_queue]))
-        task_result = asyncio.create_task(task_results(pc, result_queue))
+            task_sample_processor = asyncio.create_task(
+                process_sample(
+                    pc,
+                    executor,
+                    process_queue,
+                    [result_queue],
+                )
+            )
+            task_result = asyncio.create_task(task_results(pc, result_queue))
 
-        process_queues.add(process_queue)
-        result_queues.add(result_queue)
+            process_queues.add(process_queue)
+            result_queues.add(result_queue)
 
-        process_tasks.add(task_sample_processor)
-        result_tasks.add(task_result)
+            process_tasks.add(task_sample_processor)
+            result_tasks.add(task_result)
 
-    # distribute samples to all process queues:
-    async for sample in source_gen:
-        for pq in process_queues:
-            await pq.put(sample)
+        # distribute samples to all process queues:
+        async for sample in source_gen:
+            for pq in process_queues:
+                await pq.put(sample)
 
-    # wait for processing:
-    for pq in [*process_queues, *result_queues]:
-        await pq.join()
+        # wait for processing:
+        for pq in [*process_queues, *result_queues]:
+            await pq.join()
 
-    # cancel all tasks:
-    for t in [*process_tasks, *result_tasks]:
-        t.cancel()
+        # cancel all tasks:
+        for t in [*process_tasks, *result_tasks]:
+            t.cancel()
 
 
 if __name__ == "__main__":
