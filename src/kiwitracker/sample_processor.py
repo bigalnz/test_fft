@@ -194,7 +194,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 *(
                     new_f
                     for f in beep_freqs
-                    if 160_100_110 <= (new_f := f + pc.sample_config.center_freq) <= 161_120_000
+                    if 160_115_000 <= (new_f := f + pc.sample_config.center_freq) <= 161_115_000
                 ),
             }
 
