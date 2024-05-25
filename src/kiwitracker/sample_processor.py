@@ -44,7 +44,7 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
 
 def channel(carrier_freq: float) -> int:
     """Channel Number from Freq"""
-    return math.floor((carrier_freq - 160.11e6) / 0.01e6)
+    return int(round((carrier_freq - 160.12e6) / 0.01e6))
 
 
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
@@ -166,7 +166,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
             # print(f"{np.max(fft)/np.median(fft)}")
 
             # DC Spike removal
-            fft[len(fft) // 2] = np.mean(fft[(len(fft) // 2) - 10 : (len(fft) // 2) - 3])
+            fft[(len(fft) // 2 - 60):(len(fft) // 2 + 60)] = np.mean(fft[(len(fft) // 2) - 80 : (len(fft) // 2) -60 ])
 
             if (np.max(fft) / np.median(fft)) > 20:
                 # if np.max(fft) > fft_thresh:
@@ -182,7 +182,8 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 # noise_floor = np.median(fft) * 5
                 # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
 
-                peaks = signal.find_peaks(fft, prominence=0.01)[0]
+
+                peaks = signal.find_peaks(fft, prominence=0.0015)[0]
                 beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
 
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??

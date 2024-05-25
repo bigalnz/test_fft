@@ -69,7 +69,7 @@ class ProcessConfig:
     @property
     def channel(self) -> int:
         """Channel Number from Freq"""
-        return math.floor((self.carrier_freq - 160.11e6) / 0.01e6)
+        return int(round((self.carrier_freq - 160.12e6) / 0.01e6))
 
     @property
     def fft_size(self, beep_duration=0.017) -> int:
