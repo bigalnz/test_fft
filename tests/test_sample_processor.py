@@ -11,7 +11,8 @@ from kiwitracker.sample_reader import chunk_numpy_file, pipeline, source_file
 
 @pytest.mark.asyncio
 async def test_scan(request, process_config):
-    p = request.config.rootpath / "data" / "test_multiple_4.s8"
+    # p = request.config.rootpath / "data" / "test_multiple_4.s8"
+    p = request.config.rootpath / "data" / "test_multiple_v2.fc32"
 
     process_config.carrier_freq = None
     process_config.sample_config.center_freq = 160_500_000

@@ -166,7 +166,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
             # print(f"{np.max(fft)/np.median(fft)}")
 
             # DC Spike removal
-            fft[(len(fft) // 2 - 60):(len(fft) // 2 + 60)] = np.mean(fft[(len(fft) // 2) - 80 : (len(fft) // 2) -60 ])
+            fft[(len(fft) // 2 - 60) : (len(fft) // 2 + 60)] = np.mean(fft[(len(fft) // 2) - 80 : (len(fft) // 2) - 60])
 
             if (np.max(fft) / np.median(fft)) > 20:
                 # if np.max(fft) > fft_thresh:
@@ -181,7 +181,6 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 # So it adds all freqs detected over the threshold
                 # noise_floor = np.median(fft) * 5
                 # beep_freqs.append(np.linspace(pc.sample_rate / -2, pc.sample_rate / 2, pc.fft_size)[np.argmax(fft)])
-
 
                 peaks = signal.find_peaks(fft, prominence=0.0015)[0]
                 beep_freqs = {*beep_freqs, *fft_freqs_array(pc.sample_rate, size)[peaks]}
@@ -199,7 +198,11 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 ),
             }
 
-    return [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
+    grouped = [int(statistics.mean(x)) for _, x in itertools.groupby(sorted(out), key=lambda f: (f + 5000) // 10000)]
+
+    logger.debug(f"Final grouped frequencies: {grouped}")
+
+    return grouped
 
 
 async def process_sample(
