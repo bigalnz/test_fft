@@ -188,6 +188,7 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
                 # beep_freqs.append(self.sample_rate/-2+np.argmax(fft)/fft_size*self.sample_rate) more efficent??
 
         if len(beep_freqs) != 0:
+            # beep_freqs = {f for f in beep_freqs if abs(f) <= 6_000}
             logger.debug(f"detected beep_freqs offsets is {beep_freqs}")
             out = {
                 *out,
