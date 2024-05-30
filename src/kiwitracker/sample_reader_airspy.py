@@ -33,7 +33,7 @@ class BufferAirspy:
 
             if self.samples.size >= count:
                 samples = self.samples[:count]
-                self.samples = self.samples[count:]
+                self.samples = self.samples[count:].copy()
                 logger.debug(f"Returned array of size {samples.size} from BufferAirspy.get()")
                 return samples
 
