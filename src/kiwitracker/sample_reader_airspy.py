@@ -35,7 +35,13 @@ class BufferAirspy:
                 # samples = self.samples[:count]
                 # self.samples = self.samples[count:].copy()
                 samples = np.array(self.samples[:count], dtype="complex64")
-                self.samples = np.array(self.samples[count:], dtype="complex64")
+                new_samples = np.array(self.samples[count:], dtype="complex64")
+
+                self.samples.resize(0, refcheck=False)
+                del self.samples
+
+                self.samples = new_samples
+
                 logger.debug(f"Returned array of size {samples.size} from BufferAirspy.get()")
                 return samples
 
