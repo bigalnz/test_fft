@@ -32,8 +32,10 @@ class BufferAirspy:
                 self.samples = np.concatenate((self.samples, *tmp))
 
             if self.samples.size >= count:
-                samples = self.samples[:count]
-                self.samples = self.samples[count:].copy()
+                # samples = self.samples[:count]
+                # self.samples = self.samples[count:].copy()
+                samples = np.array(self.samples[:count], dtype="complex64")
+                self.samples = np.array(self.samples[count:], dtype="complex64")
                 logger.debug(f"Returned array of size {samples.size} from BufferAirspy.get()")
                 return samples
 
