@@ -128,9 +128,15 @@ def _rx_callback(transfer):
     if transfer.contents.dropped_samples > 0:
         logger.error(f"Dropped samples {transfer.contents.dropped_samples}")
 
-    complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
-        "complex64"
+    # complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
+    #     "complex64"
+    # )
+    complex_data = (
+        numpy.asarray(transfer.contents.samples.contents, dtype="float32")
+        .reshape(transfer.contents.samples_count, 2)
+        .view("complex64")
     )
+
     callback_fn = ctypes.cast(transfer.contents.ctx, ctypes.POINTER(ctypes.py_object)).contents.value
     callback_fn(complex_data)
 

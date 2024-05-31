@@ -50,7 +50,6 @@ class SampleReaderDummy:
         self.aio_loop = asyncio.get_running_loop()
 
         def run_in_thread():
-            arr = np.zeros(250_000 // 4, dtype="complex64")
 
             # while True:
             #     future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(arr.copy()), self.aio_loop)
@@ -63,7 +62,11 @@ class SampleReaderDummy:
 
             #     logger.debug(f"Added array of size={len(arr)} to to queue.")
 
+            # tmp = []
+
             while True:
+                arr = np.zeros(250_000 // 2, dtype="complex64")
+                # tmp.append(arr)
                 self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, arr.flatten())
                 time.sleep(0.01)
                 logger.debug(f"Added array of size={len(arr)} to to queue.")
