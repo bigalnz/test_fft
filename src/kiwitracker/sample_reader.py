@@ -751,12 +751,12 @@ async def pipeline(
             # distribute samples to all process queues:
             async for sample in source_gen:
                 for pq in process_queues:
-                    await pq.put(sample)
+                    await pq.put(sample.copy())
 
                 # is background scanning active?
                 # If yes, put sample to the scan_frequncies queue...
                 if bg_scan_interval_event.is_set():
-                    await bg_scan_interval_input_queue.put(sample)
+                    await bg_scan_interval_input_queue.put(sample.copy())
                 # has background scanning produced new frequencies?
                 elif not bg_scan_interval_output_queue.empty():
                     frequencies = await bg_scan_interval_output_queue.get()
