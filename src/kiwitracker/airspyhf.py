@@ -131,11 +131,10 @@ def _rx_callback(transfer):
     # complex_data = numpy.ctypeslib.as_array(transfer.contents.samples, shape=(transfer.contents.samples_count, 2)).view(
     #     "complex64"
     # )
-    complex_data = (
-        numpy.asarray(transfer.contents.samples.contents, dtype="float32")
-        .reshape(transfer.contents.samples_count, 2)
-        .view("complex64")
-    )
+
+    samples_count = transfer.contents.samples_count
+    ptr = ctypes.cast(transfer.contents.samples, ctypes.POINTER(ctypes.c_float * samples_count * 2))
+    complex_data = numpy.asarray(ptr.contents).reshape(samples_count, 2).view("complex64")
 
     callback_fn = ctypes.cast(transfer.contents.ctx, ctypes.POINTER(ctypes.py_object)).contents.value
     callback_fn(complex_data)
