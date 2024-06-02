@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import cProfile
+import io
 import logging
 import os
+import pstats
 import tracemalloc
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
@@ -25,7 +28,7 @@ from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
                                           process_sample)
 
-tracemalloc.start()
+# tracemalloc.start()
 
 logger = logging.getLogger("KiwiTracker")
 
@@ -737,6 +740,9 @@ async def pipeline(
         )
     )
 
+    pr = cProfile.Profile()
+    pr.enable()
+
     with ProcessPoolExecutor(max_workers=4) as executor:
         while True:
             process_queues, result_queues, process_tasks, result_tasks = create_structures_from_frequencies(
@@ -746,7 +752,7 @@ async def pipeline(
                 task_results,
             )
 
-            snapshot1 = tracemalloc.take_snapshot()
+            # snapshot1 = tracemalloc.take_snapshot()
 
             # distribute samples to all process queues:
             async for sample in source_gen:
@@ -764,12 +770,12 @@ async def pipeline(
                     logger.info(f"New frequencies found: {frequencies=}, creating new structrures...")
                     break
 
-                snapshot2 = tracemalloc.take_snapshot()
-                top_stats = snapshot2.compare_to(snapshot1, "lineno")
+                # snapshot2 = tracemalloc.take_snapshot()
+                # top_stats = snapshot2.compare_to(snapshot1, "lineno")
 
-                logger.info("[ Top 10 differences ]")
-                for stat in top_stats[:10]:
-                    logger.info(stat)
+                # logger.info("[ Top 10 differences ]")
+                # for stat in top_stats[:10]:
+                #     logger.info(stat)
 
             else:
                 break  # `source_gen` is exhausted, end all processing
@@ -781,6 +787,14 @@ async def pipeline(
         # cancel all tasks:
         for t in [*process_tasks, *result_tasks, task_scan_interval]:
             t.cancel()
+
+    pr.disable()
+
+    s = io.StringIO()
+    sortby = pstats.SortKey.CUMULATIVE
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
 
 
 if __name__ == "__main__":
