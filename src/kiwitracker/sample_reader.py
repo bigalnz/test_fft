@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 import os
-# import tracemalloc
+import tracemalloc
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from types import FunctionType
@@ -25,7 +25,7 @@ from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
                                           process_sample)
 
-# tracemalloc.start()
+tracemalloc.start()
 
 logger = logging.getLogger("KiwiTracker")
 
@@ -746,7 +746,7 @@ async def pipeline(
                 task_results,
             )
 
-            # snapshot1 = tracemalloc.take_snapshot()
+            snapshot1 = tracemalloc.take_snapshot()
 
             # distribute samples to all process queues:
             async for sample in source_gen:
@@ -764,12 +764,12 @@ async def pipeline(
                     logger.info(f"New frequencies found: {frequencies=}, creating new structrures...")
                     break
 
-                # snapshot2 = tracemalloc.take_snapshot()
-                # top_stats = snapshot2.compare_to(snapshot1, "lineno")
+                snapshot2 = tracemalloc.take_snapshot()
+                top_stats = snapshot2.compare_to(snapshot1, "lineno")
 
-                # logger.info("[ Top 10 differences ]")
-                # for stat in top_stats[:10]:
-                #     logger.info(stat)
+                logger.info("[ Top 10 differences ]")
+                for stat in top_stats[:10]:
+                    logger.info(stat)
 
             else:
                 break  # `source_gen` is exhausted, end all processing

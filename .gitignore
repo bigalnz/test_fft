@@ -103,3 +103,6 @@ temp/
 
 # sqlite database files
 *.db
+
+# vscode stuff
+.vscode/

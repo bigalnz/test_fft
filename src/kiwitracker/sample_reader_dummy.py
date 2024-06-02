@@ -65,11 +65,18 @@ class SampleReaderDummy:
             # tmp = []
 
             while True:
-                arr = np.zeros(250_000 // 2, dtype="complex64")
+                arr = np.zeros(250_000, dtype="float64").reshape((125_000, 2)).view("complex64")
+
+                # arr = arr_orig.copy()
+                # del arr_orig
+
+                # arr = np.zeros(250_000, dtype="complex64").reshape((125_000, 2))
+                # arr = np.zeros(250_000, dtype="complex64").reshape((125_000, 2))
                 # tmp.append(arr)
                 self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, arr.flatten())
-                time.sleep(0.01)
+                time.sleep(0.1)
                 logger.debug(f"Added array of size={len(arr)} to to queue.")
+                # del arr
 
         self.thread = threading.Thread(
             target=run_in_thread,
