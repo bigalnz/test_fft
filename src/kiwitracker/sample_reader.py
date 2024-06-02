@@ -661,7 +661,7 @@ def create_structures_from_frequencies(
         p.carrier_freq = f
 
         result_queue = asyncio.Queue()
-        process_queue = asyncio.Queue()
+        process_queue = asyncio.Queue(maxsize=1)
 
         task_sample_processor = asyncio.create_task(
             process_sample(
