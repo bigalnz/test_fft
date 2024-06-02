@@ -215,7 +215,7 @@ def main():
                 source_gen=source_file(
                     filename=args.infile,
                     N=process_config.num_samples_to_process,
-                    num_chunks=None,
+                    num_chunks=100,
                 ),
                 task_results=results_pipeline,
             )
@@ -664,7 +664,7 @@ def create_structures_from_frequencies(
         p.carrier_freq = f
 
         result_queue = asyncio.Queue()
-        process_queue = asyncio.Queue(maxsize=1)
+        process_queue = asyncio.Queue(maxsize=3)
 
         task_sample_processor = asyncio.create_task(
             process_sample(
