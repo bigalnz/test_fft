@@ -72,8 +72,13 @@ def decimate_samples(
     """
     Returns: decimated smoothed samples, decimated sample rate and unsmoothed samples
     """
-    samples = np.abs(samples[::100])
+
+    samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
+
     return samples, pc.sample_rate / 100, samples
+
+
+
 
     # samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
     # # next two lines are band pass filter?
