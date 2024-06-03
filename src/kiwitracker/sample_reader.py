@@ -406,6 +406,12 @@ async def results_pipeline(
     queue: asyncio.Queue,
 ) -> None:
 
+    while True:
+        _ = await queue.get()
+        queue.task_done()
+
+    return
+
     fast_telemetry_queue = asyncio.Queue()
     chick_timer_queue = asyncio.Queue()
     store_bpm_to_db_queue = asyncio.Queue()
