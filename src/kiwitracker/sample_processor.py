@@ -264,6 +264,8 @@ async def process_sample(
         samples, sample_rate, unsmoothed_samples = await fut
         previous_samples = unsmoothed_samples
 
+        continue
+
         # ... = dbc.send(samples, sample_rate)
 
         rising_edge_idx, falling_edge_idx = rising_falling_indices(samples, unsmoothed_samples)
