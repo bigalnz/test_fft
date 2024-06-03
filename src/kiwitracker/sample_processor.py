@@ -72,18 +72,20 @@ def decimate_samples(
     """
     Returns: decimated smoothed samples, decimated sample rate and unsmoothed samples
     """
-
-    samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
-    # next two lines are band pass filter?
-    samples = signal.convolve(samples, fir(), "same")
-    # decimation
     samples = np.abs(samples[::100])
+    return samples, pc.sample_rate / 100, samples
 
-    unsmoothed_samples = samples
-    # smoothing - smoothed samples are good for beep detection only.
-    # samples = signal.convolve(samples, [1] * 189, "valid") / 189
-    samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
-    return samples, pc.sample_rate / 100, unsmoothed_samples
+    # samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
+    # # next two lines are band pass filter?
+    # samples = signal.convolve(samples, fir(), "same")
+    # # decimation
+    # samples = np.abs(samples[::100])
+
+    # unsmoothed_samples = samples
+    # # smoothing - smoothed samples are good for beep detection only.
+    # # samples = signal.convolve(samples, [1] * 189, "valid") / 189
+    # samples = signal.convolve(np.concatenate((previous_samples[-188:], samples)), [1] * 189, "valid") / 189
+    # return samples, pc.sample_rate / 100, unsmoothed_samples
 
 
 def rising_falling_indices(samples: np.ndarray, unsmoothed_samples: np.ndarray) -> tuple[list[int], list[int]]:
