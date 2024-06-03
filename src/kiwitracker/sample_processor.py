@@ -74,6 +74,7 @@ def decimate_samples(
     """
 
     samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
+    samples = signal.convolve(samples, fir(), "same")
     samples = np.abs(samples[::100])
 
     return samples, pc.sample_rate / 100, samples
