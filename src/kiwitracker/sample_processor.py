@@ -264,6 +264,7 @@ async def process_sample(
         samples, sample_rate, unsmoothed_samples = await fut
         previous_samples = unsmoothed_samples
 
+        samples_queue.task_done()
         continue
 
         # ... = dbc.send(samples, sample_rate)
