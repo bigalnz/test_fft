@@ -75,7 +75,7 @@ def decimate_samples(
 
     samples = samples * phasor(pc.num_samples_to_process, pc.sample_rate, pc.freq_offset)[: samples.size]
     # next two lines are band pass filter?
-    samples = signal.convolve(samples, fir(), mode="same", method="direct")
+    samples = signal.convolve(samples, fir(), mode="same", method="fft")
     # decimation
     samples = np.abs(samples[::100])
 
