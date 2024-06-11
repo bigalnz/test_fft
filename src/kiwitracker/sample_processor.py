@@ -24,7 +24,7 @@ logger = logging.getLogger("KiwiTracker")
 
 @lru_cache(maxsize=1)
 def fir() -> np.ndarray:
-    return signal.firwin(501, 0.02, pass_zero=True)
+    return signal.firwin(501, 0.005, pass_zero=True)
 
 
 @lru_cache(maxsize=5)
