@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import cProfile
+# import cProfile
 import io
 import logging
 import os
@@ -406,11 +406,11 @@ async def results_pipeline(
     queue: asyncio.Queue,
 ) -> None:
 
-    while True:
-        _ = await queue.get()
-        queue.task_done()
+    # while True:
+    #     _ = await queue.get()
+    #     queue.task_done()
 
-    return
+    # return
 
     fast_telemetry_queue = asyncio.Queue()
     chick_timer_queue = asyncio.Queue()
@@ -746,8 +746,8 @@ async def pipeline(
         )
     )
 
-    pr = cProfile.Profile()
-    pr.enable()
+    # pr = cProfile.Profile()
+    # pr.enable()
 
     with ProcessPoolExecutor(max_workers=4) as executor:
         while True:
@@ -794,13 +794,13 @@ async def pipeline(
         for t in [*process_tasks, *result_tasks, task_scan_interval]:
             t.cancel()
 
-    pr.disable()
+    # pr.disable()
 
-    s = io.StringIO()
-    sortby = pstats.SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())
+    # s = io.StringIO()
+    # sortby = pstats.SortKey.CUMULATIVE
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+    # print(s.getvalue())
 
 
 if __name__ == "__main__":
