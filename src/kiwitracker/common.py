@@ -49,7 +49,7 @@ class ProcessConfig:
 
     """Center frequency of the carrier wave to process (in Hz)"""
 
-    num_samples_to_process: int = int(2.5e5)
+    num_samples_to_process: int = 256_000  # 256k int(2.5e5)
     """Number of samples needed to process"""
 
     running_mode: str = "radio"

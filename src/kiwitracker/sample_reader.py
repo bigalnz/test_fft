@@ -26,7 +26,7 @@ from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
 from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
-                                          process_sample)
+                                          process_sample, process_sample_new)
 
 # tracemalloc.start()
 
@@ -731,6 +731,15 @@ async def pipeline(
             frequencies = [process_config.carrier_freq]
         case _:
             raise ValueError(f"Type of process_config {type(process_config)} not understood.")
+
+    q = asyncio.Queue()
+    t = asyncio.Task(process_sample_new(process_config, q))
+
+    async for sample in source_gen:
+        await q.put(sample)
+
+    return
+    ####################################################################################################################
 
     # setup background scanning:
     bg_scan_interval_input_queue = asyncio.Queue()

@@ -206,6 +206,84 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
     return grouped
 
 
+# new method according:
+# https://github.com/bigalnz/test_fft/blob/23-fft-channelizer/notebooks/fft_perf.ipynb
+
+
+# command:
+# kiwitracker --center 160425000 -f data/6_channels_768_samp.fc32 --scan 0 -s 7680000 --no-use-gps --loglevel info
+async def process_sample_new(
+    pc: ProcessConfig,
+    samples_queue: asyncio.Queue,
+) -> None:
+
+    print(f"{pc.sample_config.center_freq=} {pc.sample_config.sample_rate=}")
+
+    # f0 = 160.425e6  # Center frequency
+    f0 = int(pc.sample_config.center_freq)
+    # Fs = 768e3  # Sampling rate
+    Fs = int(pc.sample_config.sample_rate)
+
+    N_fft = 1024  # Number of FFT channels
+    # N_time_PSD = 250
+    N_time_PSD = 50
+    threshold = 2.2
+
+    # Generate array of channel frequencies
+    f = (np.fft.fftshift(np.fft.fftfreq(N_fft, 1 / Fs)) + f0) / 1e6
+
+    # Time tag each sample
+    # t = np.arange(pc.num_samples_to_process) / Fs
+
+    while True:
+        samples = await samples_queue.get()
+
+        # do we need to quit? E.g. we processed all chunks from test file
+        if samples is None:
+            samples_queue.task_done()
+            break
+
+        print(f"Received {len(samples)=}")
+
+        # Reshape so we can do an FFT over an axis
+        d_fft = samples.reshape((-1, N_fft))
+        D = np.fft.fftshift(np.fft.fft(d_fft, axis=1), axes=(1,))
+
+        # Time tag each sample coming from a channel
+        # T = np.arange(len(D)) / Fs * N_fft
+
+        # Now convert into power spectral density
+        # 1. Reshape to (N_timestep, N_int_per_timestep, N_fft)
+        # 2. Square
+        # 3. Sum over N_int_per_timestep axis
+        PSD = (np.abs(D.reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
+
+        # Create overall spectrum
+        spec = PSD.mean(axis=0)
+
+        # Find peaks (note: I hand-tuned prominence)
+        p = signal.find_peaks(spec, prominence=0.1)[0]
+
+        # Extract the time series for each channel identified
+        t_kiwis = []
+        for idx in p:
+            t_kiwis.append(D[:, idx])
+
+        # And extract the carrier frequencies
+        f_kiwis = f[p]
+
+        for ii, tk in enumerate(t_kiwis):
+            low_samples = np.abs(tk) < threshold
+            high_samples = np.abs(tk) >= threshold
+            rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+            # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
+
+            print(f"{f_kiwis[ii]:.3f} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
+
+        samples_queue.task_done()
+        print("-" * 80)
+
+
 async def process_sample(
     pc: ProcessConfig,
     executor: ProcessPoolExecutor,
