@@ -225,8 +225,7 @@ async def process_sample_new(
     Fs = int(pc.sample_config.sample_rate)
 
     N_fft = 1024  # Number of FFT channels
-    # N_time_PSD = 250
-    N_time_PSD = 50
+    N_time_PSD = 250
     threshold = 2.2
 
     # Generate array of channel frequencies
@@ -235,6 +234,9 @@ async def process_sample_new(
     # Time tag each sample
     # t = np.arange(pc.num_samples_to_process) / Fs
 
+    cnt = 0
+    prev_high_samples = {}
+
     while True:
         samples = await samples_queue.get()
 
@@ -242,8 +244,6 @@ async def process_sample_new(
         if samples is None:
             samples_queue.task_done()
             break
-
-        print(f"Received {len(samples)=}")
 
         # Reshape so we can do an FFT over an axis
         d_fft = samples.reshape((-1, N_fft))
@@ -278,7 +278,27 @@ async def process_sample_new(
             rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
             # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
-            print(f"{f_kiwis[ii]:.3f} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
+            if not rising_edge_idx:
+                continue
+
+            assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
+
+            channel = f"{f_kiwis[ii]:.3f}"
+            prev = prev_high_samples.get(channel)
+
+            if not prev:
+                prev_high_samples[channel] = (rising_edge_idx[0], cnt)
+                continue
+
+            bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+
+            # print(f"{channel} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
+            print(f"{channel} MHz {bpm}\n")
+
+            prev_high_samples[channel] = (rising_edge_idx[0], cnt)
+
+        # increase counter to correctly compute BPMs
+        cnt += 1
 
         samples_queue.task_done()
         print("-" * 80)
