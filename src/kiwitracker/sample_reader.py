@@ -16,7 +16,7 @@ from typing import AsyncIterator, Callable
 import numpy as np
 from sqlalchemy.orm import Session
 
-from kiwitracker.common import ProcessConfig, SampleConfig
+from kiwitracker.common import ProcessConfig, ProcessResult, SampleConfig
 from kiwitracker.db.engine import (construct_db_connection_string,
                                    construct_sqlalchemy_engine,
                                    get_sqlalchemy_engine, migrate_if_needed)
@@ -691,6 +691,30 @@ def create_structures_from_frequencies(
     return process_queues, result_queues, process_tasks, result_tasks
 
 
+async def process_results(
+    pc: ProcessConfig,
+    queue_results: asyncio.Queue,
+    task_results,
+) -> None:
+    # for each channel we will have separate async task
+    queues = {}
+
+    while True:
+        res: ProcessResult = await queue_results.get()
+
+        q = queues.get(res.channel, None)
+        if not q:
+            p = deepcopy(pc)
+            p.carrier_freq = res.carrier_freq
+            q = asyncio.Queue()
+            task_result = asyncio.create_task(task_results(p, q))
+            queues[res.channel] = q
+
+        await q.put(res)
+
+        queue_results.task_done()
+
+
 async def pipeline(
     process_config: list[ProcessConfig] | ProcessConfig,
     source_gen: AsyncIterator[np.ndarray],
@@ -706,37 +730,47 @@ async def pipeline(
     if task_results is None:
         task_results = _discard_results
 
-    # what process config we have?
-    # - list of process configs
-    # - single process config with carrier_freq=None (should scan.)
-    # - single process config with defined carrier_freq
-    match process_config:
-        case list():
-            # TODO: process config could be list (define carrier frequencies from command line)
-            # list of fully defined ProcessConfigs (with carrier_freq defined from command line)
-            raise NotImplementedError("Multiple process_configs in pipeline not yet implemented.")
-        case ProcessConfig() if process_config.carrier_freq is None:
-            # carrier_freq is None - we should scan for frequencies
-            logger.info("Carrier frequency not set - start scanning...")
-            frequencies = await scan_for_frequencies(source_gen, process_config)
+    # # what process config we have?
+    # # - list of process configs
+    # # - single process config with carrier_freq=None (should scan.)
+    # # - single process config with defined carrier_freq
+    # match process_config:
+    #     case list():
+    #         # TODO: process config could be list (define carrier frequencies from command line)
+    #         # list of fully defined ProcessConfigs (with carrier_freq defined from command line)
+    #         raise NotImplementedError("Multiple process_configs in pipeline not yet implemented.")
+    #     case ProcessConfig() if process_config.carrier_freq is None:
+    #         # carrier_freq is None - we should scan for frequencies
+    #         logger.info("Carrier frequency not set - start scanning...")
+    #         frequencies = await scan_for_frequencies(source_gen, process_config)
 
-            # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
-            # logger.info(f"Picking first one: {frequencies[0]}")
-            # process_config.carrier_freq = frequencies[0]
-            # process_config.carrier_freq = 160270968
-            # process_config = [process_config]
-        case ProcessConfig():
-            # fully defined ProcessConfig (with carrier_freq)
-            # process_config = [process_config]
-            frequencies = [process_config.carrier_freq]
-        case _:
-            raise ValueError(f"Type of process_config {type(process_config)} not understood.")
+    #         # TODO: create multime process sample tasks, each with different process_config, frequency, queues...
+    #         # logger.info(f"Picking first one: {frequencies[0]}")
+    #         # process_config.carrier_freq = frequencies[0]
+    #         # process_config.carrier_freq = 160270968
+    #         # process_config = [process_config]
+    #     case ProcessConfig():
+    #         # fully defined ProcessConfig (with carrier_freq)
+    #         # process_config = [process_config]
+    #         frequencies = [process_config.carrier_freq]
+    #     case _:
+    #         raise ValueError(f"Type of process_config {type(process_config)} not understood.")
 
-    q = asyncio.Queue()
-    t = asyncio.Task(process_sample_new(process_config, q))
+    queue_input = asyncio.Queue()
+    queue_output = asyncio.Queue()
+
+    process_result_task = asyncio.create_task(
+        process_results(
+            process_config,
+            queue_output,
+            task_results,
+        )
+    )
+
+    t = asyncio.Task(process_sample_new(process_config, queue_input, queue_output))
 
     async for sample in source_gen:
-        await q.put(sample)
+        await queue_input.put(sample)
 
     return
     ####################################################################################################################

@@ -85,6 +85,7 @@ class ProcessResult:
 
     date: datetime.datetime
     channel: int
+    carrier_freq: float
     BPM: float
     DBFS: float
     CLIPPING: float

@@ -42,9 +42,14 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
     return np.linspace(sample_rate / -2, sample_rate / 2, fft_size)
 
 
-def channel(carrier_freq: float) -> int:
+# def channel(carrier_freq: float) -> int:
+#     """Channel Number from Freq"""
+#     return int(round((carrier_freq - 160.12e6) / 0.01e6))
+
+
+def channel_new(carrier_freq: float) -> int:
     """Channel Number from Freq"""
-    return int(round((carrier_freq - 160.12e6) / 0.01e6))
+    return int(round(abs(carrier_freq - 160.425) / 0.01))
 
 
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
@@ -215,9 +220,12 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
 async def process_sample_new(
     pc: ProcessConfig,
     samples_queue: asyncio.Queue,
+    queue_output: asyncio.Queue,
 ) -> None:
 
-    print(f"{pc.sample_config.center_freq=} {pc.sample_config.sample_rate=}")
+    logger.info(
+        f"process_sample_new(): started with parameters {pc.sample_config.center_freq=} {pc.sample_config.sample_rate=}"
+    )
 
     # f0 = 160.425e6  # Center frequency
     f0 = int(pc.sample_config.center_freq)
@@ -278,30 +286,49 @@ async def process_sample_new(
             rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
             # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
-            if not rising_edge_idx:
+            if len(rising_edge_idx) == 0:
                 continue
 
             assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
 
-            channel = f"{f_kiwis[ii]:.3f}"
-            prev = prev_high_samples.get(channel)
+            channel_str = f"{f_kiwis[ii]:.3f}"
+            channel_no = channel_new(f_kiwis[ii])
+            prev = prev_high_samples.get(f_kiwis[ii])
 
             if not prev:
-                prev_high_samples[channel] = (rising_edge_idx[0], cnt)
+                prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
                 continue
 
             bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
-            # print(f"{channel} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
-            print(f"{channel} MHz {bpm}\n")
+            latitude, longitude = pc.gps_module.get_current()
+            res = ProcessResult(
+                date=datetime.now(),
+                channel=channel_no,
+                carrier_freq=f_kiwis[ii],
+                BPM=bpm,
+                DBFS=-1,
+                CLIPPING=-1,
+                BEEP_DURATION=-1,
+                SNR=-1,
+                latitude=latitude,
+                longitude=longitude,
+            )
 
-            prev_high_samples[channel] = (rising_edge_idx[0], cnt)
+            # print(f"{channel_str} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
+            # logger.debug(f"process_sample_new(): {channel_str} MHz/{channel_no} {bpm}")
+            logger.info(
+                f"[{channel_no:>3}/{channel_str}] BPM: {bpm:<3.2f} | PWR: - dBFS | MAG: - | BEEP_DURATION: - | SNR: - | POS: {latitude} {longitude}"
+            )
+
+            await queue_output.put(res)
+
+            prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
 
         # increase counter to correctly compute BPMs
         cnt += 1
 
         samples_queue.task_done()
-        print("-" * 80)
 
 
 async def process_sample(
@@ -523,16 +550,18 @@ async def fast_telemetry(
             try:
                 normalized_bpm = normalize_bpm(process_result.BPM)
             except ValueError as err:
-                logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] fast_telemetry._wait_for_state(): {err}")
+                logger.error(
+                    f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] fast_telemetry._wait_for_state(): {err}"
+                )
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: [{channel(pc.carrier_freq)}/{pc.carrier_freq}] partial state found {k=}/{v=}")
+            logger.debug(f"FT: [{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] partial state found {k=}/{v=}")
 
             return k, process_result.SNR, process_result.DBFS
 
     cf = pc.carrier_freq
-    ch = channel(cf)
+    ch = channel_new(cf)
 
     while True:
         start_dt, end_dt = None, None
@@ -581,7 +610,7 @@ async def fast_telemetry(
         d1 = int(f"{digits[0]}{digits[1]}")
         d2 = int(f"{digits[2]}{digits[3]}")
 
-        logger.info(f"FT: [{channel(pc.carrier_freq)}/{pc.carrier_freq}] state found {mode}-{d1}-{d2}")
+        logger.info(f"FT: [{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] state found {mode}-{d1}-{d2}")
 
         r = FTResult(
             channel=ch,
@@ -630,7 +659,7 @@ async def chick_timer(
 
             except ValueError as err:
                 # logger.exception(err)
-                logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer._wait_for_start(): {err}")
+                logger.error(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer._wait_for_start(): {err}")
 
     async def _wait_specific_num_of_beeps(num: int) -> None:
         while num > 0:
@@ -683,7 +712,7 @@ async def chick_timer(
     ]
 
     cf = pc.carrier_freq
-    ch = channel(cf)
+    ch = channel_new(cf)
 
     while True:
         snrs, dbfs = [], []
