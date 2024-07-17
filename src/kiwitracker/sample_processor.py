@@ -291,7 +291,7 @@ async def process_sample_new(
 
             assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
 
-            channel_str = f"{f_kiwis[ii]:.3f}"
+            channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
             prev = prev_high_samples.get(f_kiwis[ii])
 
@@ -318,7 +318,7 @@ async def process_sample_new(
             # print(f"{channel_str} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
             # logger.debug(f"process_sample_new(): {channel_str} MHz/{channel_no} {bpm}")
             logger.info(
-                f"[{channel_no:>3}/{channel_str}] BPM: {bpm:<3.2f} | PWR: - dBFS | MAG: - | BEEP_DURATION: - | SNR: - | POS: {latitude} {longitude}"
+                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | PWR: - dBFS | MAG: - | BEEP_DURATION: - | SNR: - | POS: {latitude} {longitude}"
             )
 
             await queue_output.put(res)
@@ -556,7 +556,7 @@ async def fast_telemetry(
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: [{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] partial state found {k=}/{v=}")
+            logger.debug(f"FT: [{ch}/{cf}] partial state found (from {process_result.BPM}) {k=}/{v=}")
 
             return k, process_result.SNR, process_result.DBFS
 
@@ -573,6 +573,7 @@ async def fast_telemetry(
             if isinstance(mode, str):
                 snrs.append(s)
                 dbfs.append(d)
+                logger.debug(f"FT: [{ch}/{cf}] (Waiting first string) String found {mode=}")
                 break
 
         start_dt = datetime.now()
@@ -588,8 +589,9 @@ async def fast_telemetry(
                     digits.append(digit)
                     snrs.append(s)
                     dbfs.append(d)
+                    logger.debug(f"FT: [{ch}/{cf}] (Waiting for 4 digits) Digits so far: {digits=}")
                 else:
-                    raise ValueError(f"Number was expected but {digit} was received.")
+                    raise ValueError(f"FT: [{ch}/{cf}] Number was expected but {digit} was received.")
         except ValueError as err:
             logger.exception(err)
             continue
@@ -610,7 +612,7 @@ async def fast_telemetry(
         d1 = int(f"{digits[0]}{digits[1]}")
         d2 = int(f"{digits[2]}{digits[3]}")
 
-        logger.info(f"FT: [{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] state found {mode}-{d1}-{d2}")
+        logger.info(f"FT: [{ch}/{cf}] state found {mode}-{d1}-{d2}")
 
         r = FTResult(
             channel=ch,

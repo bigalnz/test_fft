@@ -699,6 +699,8 @@ async def process_results(
     # for each channel we will have separate async task
     queues = {}
 
+    tasks = set()
+
     while True:
         res: ProcessResult = await queue_results.get()
 
@@ -708,6 +710,7 @@ async def process_results(
             p.carrier_freq = res.carrier_freq
             q = asyncio.Queue()
             task_result = asyncio.create_task(task_results(p, q))
+            tasks.add(task_result)
             queues[res.channel] = q
 
         await q.put(res)
