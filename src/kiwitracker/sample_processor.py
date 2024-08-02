@@ -282,7 +282,7 @@ async def process_sample_new(
 
         for ii, tk in enumerate(t_kiwis):
             low_samples = np.abs(tk) < threshold
-            high_samples = np.abs(tk) >= threshold
+            high_samples = np.abs(tk) >= threshold            
             rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
             # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
@@ -293,10 +293,12 @@ async def process_sample_new(
 
             channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
-            prev = prev_high_samples.get(f_kiwis[ii])
+            prev = prev_high_samples.get(channel_no)
+            # prev = prev_high_samples.get(f_kiwis[ii])
 
             if not prev:
-                prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
+                # prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
+                prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
                 continue
 
             bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
@@ -323,7 +325,8 @@ async def process_sample_new(
 
             await queue_output.put(res)
 
-            prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
+            # prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
+            prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
 
         # increase counter to correctly compute BPMs
         cnt += 1
