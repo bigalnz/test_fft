@@ -47,9 +47,13 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
 #     return int(round((carrier_freq - 160.12e6) / 0.01e6))
 
 
+# def channel_new(carrier_freq: float) -> int:
+#     """Channel Number from Freq"""
+#     return int(round(abs(carrier_freq - 160.425) / 0.01))
+
 def channel_new(carrier_freq: float) -> int:
     """Channel Number from Freq"""
-    return int(round(abs(carrier_freq - 160.425) / 0.01))
+    return math.floor((carrier_freq - 160.110) / 0.01)
 
 
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
