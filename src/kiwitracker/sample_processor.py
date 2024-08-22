@@ -51,6 +51,7 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
 #     """Channel Number from Freq"""
 #     return int(round(abs(carrier_freq - 160.425) / 0.01))
 
+
 def channel_new(carrier_freq: float) -> int:
     """Channel Number from Freq"""
     return math.floor((carrier_freq - 160.110) / 0.01)
@@ -247,7 +248,10 @@ async def process_sample_new(
     # t = np.arange(pc.num_samples_to_process) / Fs
 
     cnt = 0
-    prev_high_samples = {}
+    prev_rising_edge_idx = {}
+
+    buffer_low_samples = {}
+    buffer_high_samples = {}
 
     while True:
         samples = await samples_queue.get()
@@ -283,9 +287,32 @@ async def process_sample_new(
         f_kiwis = f[p]
 
         for ii, tk in enumerate(t_kiwis):
+            channel_str = f"{f_kiwis[ii]}"
+            channel_no = channel_new(f_kiwis[ii])
+
             low_samples = np.abs(tk) < threshold
-            high_samples = np.abs(tk) >= threshold            
-            rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+            high_samples = np.abs(tk) >= threshold
+
+            ls = buffer_low_samples.get(channel_no)
+            hs = buffer_high_samples.get(channel_no)
+
+            if ls is None:
+                buffer_low_samples[channel_no] = low_samples
+                # store high samples from index 1 (to easily compare it to low samples)
+                # previous comparison method was:
+                # rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
+                buffer_high_samples[channel_no] = high_samples[1:]
+                continue
+            else:
+                ls = np.hstack((ls, low_samples))
+                hs = np.hstack((hs, high_samples))
+
+                buffer_low_samples[channel_no] = ls[N_time_PSD:]
+                buffer_high_samples[channel_no] = hs[N_time_PSD:]
+
+            rising_edge_idx = np.nonzero(ls[:N_time_PSD] & hs[:N_time_PSD])[0]
+
+            # rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
             # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
 
             if len(rising_edge_idx) == 0:
@@ -293,12 +320,10 @@ async def process_sample_new(
 
             assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
 
-            channel_str = f"{f_kiwis[ii]}"
-            channel_no = channel_new(f_kiwis[ii])
-            prev = prev_high_samples.get(channel_no)
+            prev = prev_rising_edge_idx.get(channel_no)
 
             if not prev:
-                prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
+                prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt)
                 continue
 
             bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
@@ -325,7 +350,7 @@ async def process_sample_new(
 
             await queue_output.put(res)
 
-            prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
+            prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt)
 
         # increase counter to correctly compute BPMs
         cnt += 1
