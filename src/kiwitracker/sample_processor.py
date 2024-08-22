@@ -277,9 +277,7 @@ async def process_sample_new(
         p = signal.find_peaks(spec, prominence=0.1)[0]
 
         # Extract the time series for each channel identified
-        t_kiwis = []
-        for idx in p:
-            t_kiwis.append(D[:, idx])
+        t_kiwis = [D[:, idx] for idx in p]
 
         # And extract the carrier frequencies
         f_kiwis = f[p]
@@ -298,10 +296,8 @@ async def process_sample_new(
             channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
             prev = prev_high_samples.get(channel_no)
-            # prev = prev_high_samples.get(f_kiwis[ii])
 
             if not prev:
-                # prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
                 prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
                 continue
 
@@ -329,7 +325,6 @@ async def process_sample_new(
 
             await queue_output.put(res)
 
-            # prev_high_samples[f_kiwis[ii]] = (rising_edge_idx[0], cnt)
             prev_high_samples[channel_no] = (rising_edge_idx[0], cnt)
 
         # increase counter to correctly compute BPMs
