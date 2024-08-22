@@ -293,22 +293,22 @@ async def process_sample_new(
             low_samples = np.abs(tk) < threshold
             high_samples = np.abs(tk) >= threshold
 
-            ls = buffer_low_samples.get(channel_no)
-            hs = buffer_high_samples.get(channel_no)
+            ls, cnt_ls = buffer_low_samples.get(channel_no, (None, None))
+            hs, _ = buffer_high_samples.get(channel_no, (None, None))
 
             if ls is None:
-                buffer_low_samples[channel_no] = low_samples
+                buffer_low_samples[channel_no] = (low_samples, cnt)
                 # store high samples from index 1 (to easily compare it to low samples)
                 # previous comparison method was:
                 # rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-                buffer_high_samples[channel_no] = high_samples[1:]
+                buffer_high_samples[channel_no] = (high_samples[1:], cnt)
                 continue
             else:
                 ls = np.hstack((ls, low_samples))
                 hs = np.hstack((hs, high_samples))
 
-                buffer_low_samples[channel_no] = ls[N_time_PSD:]
-                buffer_high_samples[channel_no] = hs[N_time_PSD:]
+                buffer_low_samples[channel_no] = (ls[N_time_PSD:], cnt)
+                buffer_high_samples[channel_no] = (hs[N_time_PSD:], cnt)
 
             rising_edge_idx = np.nonzero(ls[:N_time_PSD] & hs[:N_time_PSD])[0]
 
@@ -318,15 +318,18 @@ async def process_sample_new(
             if len(rising_edge_idx) == 0:
                 continue
 
+            if len(rising_edge_idx) > 1:
+                logger.error(f"There are more than one rising index in sample chunk: {rising_edge_idx=}")
+
             assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
 
             prev = prev_rising_edge_idx.get(channel_no)
 
             if not prev:
-                prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt)
+                prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt_ls)
                 continue
 
-            bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+            bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt_ls)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             latitude, longitude = pc.gps_module.get_current()
             res = ProcessResult(
@@ -350,7 +353,7 @@ async def process_sample_new(
 
             await queue_output.put(res)
 
-            prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt)
+            prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt_ls)
 
         # increase counter to correctly compute BPMs
         cnt += 1
