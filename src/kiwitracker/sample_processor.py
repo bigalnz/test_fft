@@ -216,9 +216,12 @@ async def find_beep_frequencies(source_gen: AsyncIterator[np.ndarray], pc: Proce
     return grouped
 
 
+def index_of(arr: np.array, v):
+    return next((idx[0] for idx, val in np.ndenumerate(arr) if val == v), -1)
+
+
 # new method according:
 # https://github.com/bigalnz/test_fft/blob/23-fft-channelizer/notebooks/fft_perf.ipynb
-
 
 # command:
 # kiwitracker --center 160425000 -f data/6_channels_768_samp.fc32 --scan 0 -s 7680000 --no-use-gps --loglevel info
@@ -248,10 +251,7 @@ async def process_sample_new(
     # t = np.arange(pc.num_samples_to_process) / Fs
 
     cnt = 0
-    prev_rising_edge_idx = {}
-
-    buffer_low_samples = {}
-    buffer_high_samples = {}
+    prev_rising_edge_indices = {}
 
     while True:
         samples = await samples_queue.get()
@@ -290,46 +290,32 @@ async def process_sample_new(
             channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
 
-            low_samples = np.abs(tk) < threshold
             high_samples = np.abs(tk) >= threshold
+            rising_edge_idx = index_of(high_samples, True)
+            assert rising_edge_idx != -1, "Cannot find rising index in array"
 
-            ls, cnt_ls = buffer_low_samples.get(channel_no, (None, None))
-            hs, _ = buffer_high_samples.get(channel_no, (None, None))
-
-            if ls is None:
-                buffer_low_samples[channel_no] = (low_samples, cnt)
-                # store high samples from index 1 (to easily compare it to low samples)
-                # previous comparison method was:
-                # rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-                buffer_high_samples[channel_no] = (high_samples[1:], cnt)
-                continue
-            else:
-                ls = np.hstack((ls, low_samples))
-                hs = np.hstack((hs, high_samples))
-
-                buffer_low_samples[channel_no] = (ls[N_time_PSD:], cnt)
-                buffer_high_samples[channel_no] = (hs[N_time_PSD:], cnt)
-
-            rising_edge_idx = np.nonzero(ls[:N_time_PSD] & hs[:N_time_PSD])[0]
-
-            # rising_edge_idx = np.nonzero(low_samples[:-1] & np.roll(high_samples, -1)[:-1])[0]
-            # falling_edge_idx = np.nonzero(high_samples[:-1] & np.roll(low_samples, -1)[:-1])[0]
-
-            if len(rising_edge_idx) == 0:
+            if channel_no not in prev_rising_edge_indices:
+                prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
                 continue
 
-            if len(rising_edge_idx) > 1:
-                logger.error(f"There are more than one rising index in sample chunk: {rising_edge_idx=}")
+            prev = prev_rising_edge_indices.get(channel_no)
+            assert prev is not None, "Previous rising index not found"
 
-            assert len(rising_edge_idx) == 1, "There are more than one rising index in one sample chunk!"
+            # test if current beep is "sliced"
+            # "sliced" means that rising index in current sample is 0 AND
+            # the length of the beep is less than 13 (out of 250)
+            if rising_edge_idx == 0:
+                falling_edge_idx = 250 - index_of(high_samples[::-1], True)
+                if falling_edge_idx < 13:
+                    # we are in slice!
+                    # nothing to be done here, just read next sample
+                    continue
 
-            prev = prev_rising_edge_idx.get(channel_no)
+                if falling_edge_idx > 15:
+                    # bogus beep? bad signal?
+                    continue
 
-            if not prev:
-                prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt_ls)
-                continue
-
-            bpm = 60.0 / (((rising_edge_idx[0] + (250 * cnt_ls)) - (prev[0] + 250 * prev[1])) / 750.0)
+            bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             latitude, longitude = pc.gps_module.get_current()
             res = ProcessResult(
@@ -345,15 +331,13 @@ async def process_sample_new(
                 longitude=longitude,
             )
 
-            # print(f"{channel_str} MHz {60 / (np.diff(rising_edge_idx)/750 )}\n")
-            # logger.debug(f"process_sample_new(): {channel_str} MHz/{channel_no} {bpm}")
             logger.info(
-                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | PWR: - dBFS | MAG: - | BEEP_DURATION: - | SNR: - | POS: {latitude} {longitude}"
+                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | {rising_edge_idx=}/{cnt=}/{prev=}"
             )
 
             await queue_output.put(res)
 
-            prev_rising_edge_idx[channel_no] = (rising_edge_idx[0], cnt_ls)
+            prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
 
         # increase counter to correctly compute BPMs
         cnt += 1
