@@ -220,6 +220,8 @@ def index_of(arr: np.array, v):
     return next((idx[0] for idx, val in np.ndenumerate(arr) if val == v), -1)
 
 
+# kiwitracker --center 160425000 --scan 0 -s 768000 --no-use-gps --loglevel debug -f data/sept24.fc32
+
 # new method according:
 # https://github.com/bigalnz/test_fft/blob/23-fft-channelizer/notebooks/fft_perf.ipynb
 
@@ -234,6 +236,13 @@ async def process_sample_new(
     logger.info(
         f"process_sample_new(): started with parameters {pc.sample_config.center_freq=} {pc.sample_config.sample_rate=}"
     )
+
+    freqs_to_discard = (pc.sample_config.center_freq - 10_000) / 1e6, (pc.sample_config.center_freq + 10_000) / 1e6
+
+    logger.debug(
+        f"process_sample_new(): will discard frequencies {freqs_to_discard=}"
+    )
+
 
     # f0 = 160.425e6  # Center frequency
     f0 = int(pc.sample_config.center_freq)
@@ -287,12 +296,19 @@ async def process_sample_new(
         f_kiwis = f[p]
 
         for ii, tk in enumerate(t_kiwis):
-            channel_str = f"{f_kiwis[ii]}"
-            channel_no = channel_new(f_kiwis[ii])
+
+            # discard all frequencies +/- 10kHz from center frequency
+            if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
+                continue
 
             high_samples = np.abs(tk) >= threshold
             rising_edge_idx = index_of(high_samples, True)
-            assert rising_edge_idx != -1, "Cannot find rising index in array"
+            if rising_edge_idx == -1:
+                # no rising index in array, continue
+                continue
+
+            channel_str = f"{f_kiwis[ii]}"
+            channel_no = channel_new(f_kiwis[ii])
 
             if channel_no not in prev_rising_edge_indices:
                 prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
