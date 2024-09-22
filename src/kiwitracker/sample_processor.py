@@ -54,7 +54,7 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
 
 def channel_new(carrier_freq: float) -> int:
     """Channel Number from Freq"""
-    return math.floor((carrier_freq - 160.110) / 0.01)
+    return math.floor((carrier_freq - 160.115) / 0.01)
 
 
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
