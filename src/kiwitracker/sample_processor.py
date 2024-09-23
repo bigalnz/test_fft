@@ -330,7 +330,7 @@ async def process_sample_new(
                 if falling_edge_idx > 15:
                     # bogus beep? bad signal?
                     continue
-
+            # I need falling_edge_idx to be able to calulate SNR
             bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             latitude, longitude = pc.gps_module.get_current()
