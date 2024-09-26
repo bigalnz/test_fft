@@ -314,6 +314,8 @@ async def process_sample_new(
                 prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
                 continue
 
+            falling_edge_idx = 250 - index_of(high_samples[::-1], True)
+
             prev = prev_rising_edge_indices.get(channel_no)
             assert prev is not None, "Previous rising index not found"
 
@@ -321,7 +323,6 @@ async def process_sample_new(
             # "sliced" means that rising index in current sample is 0 AND
             # the length of the beep is less than 13 (out of 250)
             if rising_edge_idx == 0:
-                falling_edge_idx = 250 - index_of(high_samples[::-1], True)
                 if falling_edge_idx < 13:
                     # we are in slice!
                     # nothing to be done here, just read next sample
@@ -330,7 +331,12 @@ async def process_sample_new(
                 if falling_edge_idx > 15:
                     # bogus beep? bad signal?
                     continue
-            # I need falling_edge_idx to be able to calulate SNR
+
+            # at this point, we know we're not in "sliced" beep and we have 
+            # rising_edge_idx and falling_edge_idx computed
+
+            # ...
+
             bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             latitude, longitude = pc.gps_module.get_current()
