@@ -345,7 +345,7 @@ async def process_sample_new(
                 channel=channel_no,
                 carrier_freq=f_kiwis[ii],
                 BPM=bpm,
-                DBFS=-1,
+                DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
                 CLIPPING=-1,
                 BEEP_DURATION=-1,
                 SNR=-1,
