@@ -335,7 +335,8 @@ async def process_sample_new(
             # at this point, we know we're not in "sliced" beep and we have 
             # rising_edge_idx and falling_edge_idx computed
 
-            # ...
+            # test_dBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
+            # print(test_dBFS)
 
             bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
@@ -345,7 +346,7 @@ async def process_sample_new(
                 channel=channel_no,
                 carrier_freq=f_kiwis[ii],
                 BPM=bpm,
-                DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
+                DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx])),
                 CLIPPING=-1,
                 BEEP_DURATION=-1,
                 SNR=-1,
@@ -354,7 +355,7 @@ async def process_sample_new(
             )
 
             logger.info(
-                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | {rising_edge_idx=}/{cnt=}/{prev=}"
+                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}"
             )
 
             await queue_output.put(res)
