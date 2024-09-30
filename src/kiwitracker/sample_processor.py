@@ -244,6 +244,10 @@ async def process_sample_new(
     )
 
 
+    def db(x):
+        return 10*np.log10(x)
+
+
     # f0 = 160.425e6  # Center frequency
     f0 = int(pc.sample_config.center_freq)
     # Fs = 768e3  # Sampling rate
@@ -294,6 +298,14 @@ async def process_sample_new(
 
         # And extract the carrier frequencies
         f_kiwis = f[p]
+
+        # AVERAGED PSD
+        plt.figure(figsize=(24,8))
+        plt.plot(f, db(spec))
+        plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power dB(counts)")
+        plt.show()
 
         for ii, tk in enumerate(t_kiwis):
 
