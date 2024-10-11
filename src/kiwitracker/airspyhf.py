@@ -32,7 +32,8 @@ class AirspyHfTransfer(ctypes.Structure):
     ]
 
 
-clibrary = ctypes.CDLL("libairspyhf.so")  # setup instance of the ctypes ref
+#clibrary = ctypes.CDLL("libairspyhf.so")  # setup instance of the ctypes ref - *nix
+clibrary = ctypes.CDLL("C:/Users/AlGrant/andrej_branch/test_fft/airspyhf.dll")  # setup instance of the ctypes ref - Windows
 
 # airspyhf_lib_version
 clibrary.airspyhf_lib_version.restype = None  # define the return type of the c function using python type 'None'

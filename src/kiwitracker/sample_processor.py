@@ -291,21 +291,27 @@ async def process_sample_new(
         spec = PSD.mean(axis=0)
 
         # Find peaks (note: I hand-tuned prominence)
-        p = signal.find_peaks(spec, prominence=0.1)[0]
+        p = signal.find_peaks(spec, prominence=0.001)[0] # can't go below 0.001 on windows - too many peaksI will
+        print(f"Number of peaks :  {len(p)}")
 
         # Extract the time series for each channel identified
         t_kiwis = [D[:, idx] for idx in p]
 
         # And extract the carrier frequencies
         f_kiwis = f[p]
+        if np.any((f_kiwis>=160.377) & (f_kiwis<=160.379)): 
+            print("peak found on target")
+        #print(f"Array of peaks(f) : {f_kiwis}")
 
         # AVERAGED PSD
-        plt.figure(figsize=(24,8))
+        """ plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
+        plt.axvline(x = 160.268, color = 'g', label = 'axvline - full height')
+        plt.axvline(x = 160.377, color = 'r', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show()
+        plt.show() """
 
         for ii, tk in enumerate(t_kiwis):
 
