@@ -330,7 +330,7 @@ async def process_sample_new(
 
             if channel_no not in noise_floors_per_channel:
                 nf = deque(maxlen=3)
-                noise_floors_per_channel[channel_no] = deque(maxlen=3)
+                noise_floors_per_channel[channel_no] = nf
             else:
                 nf = noise_floors_per_channel[channel_no]
 
