@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from functools import lru_cache
 from typing import AsyncIterator
+from collections import deque
 
 import numpy as np
 # TODO: This plotting stuff shouldn't propably be here:
@@ -74,6 +75,10 @@ def dBFS(high_samples: np.ndarray) -> float:
     pwr = np.average(pwr)
     pwr_dbfs = 10 * np.log10(pwr / 1)
     return pwr_dbfs
+
+
+def noise_floor(tk: np.ndarray) -> float:
+     return np.mean(np.abs(tk))
 
 
 def decimate_samples(
@@ -265,6 +270,7 @@ async def process_sample_new(
 
     cnt = 0
     prev_rising_edge_indices = {}
+    noise_floors_per_channel = {}
 
     while True:
         samples = await samples_queue.get()
@@ -319,14 +325,28 @@ async def process_sample_new(
             if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
                 continue
 
+            channel_str = f"{f_kiwis[ii]}"
+            channel_no = channel_new(f_kiwis[ii])
+
+            if channel_no not in noise_floors_per_channel:
+                nf = deque(maxlen=3)
+                noise_floors_per_channel[channel_no] = deque(maxlen=3)
+            else:
+                nf = noise_floors_per_channel[channel_no]
+
+            nf.append(noise_floor(tk))
+            threshold = sum(nf) / len(nf)
+
+            logger.debug(
+                f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
+            )
+            
             high_samples = np.abs(tk) >= threshold
+            
             rising_edge_idx = index_of(high_samples, True)
             if rising_edge_idx == -1:
                 # no rising index in array, continue
                 continue
-
-            channel_str = f"{f_kiwis[ii]}"
-            channel_no = channel_new(f_kiwis[ii])
 
             if channel_no not in prev_rising_edge_indices:
                 prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
@@ -801,7 +821,7 @@ async def chick_timer(
         except ChickTimerProcessingError as err:
             logger.exception(err)
         except ValueError as err:
-            logger.error(f"[{channel(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
+            logger.error(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
             # logger.exception(err)
 
         end_dt = datetime.now()
