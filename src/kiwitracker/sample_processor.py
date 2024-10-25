@@ -271,6 +271,7 @@ async def process_sample_new(
     cnt = 0
     prev_rising_edge_indices = {}
     noise_floors_per_channel = {}
+    plt.figure(figsize=(24,8))
 
     while True:
         samples = await samples_queue.get()
@@ -310,14 +311,18 @@ async def process_sample_new(
         #print(f"Array of peaks(f) : {f_kiwis}")
 
         # AVERAGED PSD
-        """ plt.figure(figsize=(24,8))
-        plt.plot(f, db(spec))
-        plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
-        plt.axvline(x = 160.268, color = 'g', label = 'axvline - full height')
-        plt.axvline(x = 160.377, color = 'r', label = 'axvline - full height')
-        plt.xlabel("Frequency [MHz]")
-        plt.ylabel("Power dB(counts)")
-        plt.show() """
+        PLOT_PSD = 0
+        if PLOT_PSD:
+            plt.clf()
+            plt.plot(f, db(spec))
+            plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
+            plt.axvline(x = 160.268, color = 'g', label = 'axvline - full height')
+            plt.axvline(x = 160.377, color = 'r', label = 'axvline - full height')
+            plt.xlabel("Frequency [MHz]")
+            plt.ylabel("Power dB(counts)")
+            plt.title(f"Averaged PSD. Count: {cnt}")
+            plt.draw()
+            plt.pause(0.1)
 
         for ii, tk in enumerate(t_kiwis):
 
