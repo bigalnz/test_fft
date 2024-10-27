@@ -304,30 +304,28 @@ async def process_sample_new(
 
         # MAX PEAKS
         # set how many maximum peaks to process, either 20 or len(p) which ever is smaller
-        if len(p) < 20:
-            num_of_peaks = len(p)
-        else:
-            num_of_peaks = 20
+        num_of_peaks = min(20, len(p))
         max_peaks = np.argpartition(prom, -num_of_peaks)[-num_of_peaks:] #get top 20 or len(p) peaks
 
         #print(f"Number of peaks :  {len(p)}")
 
         # Extract the time series for each channel identified
-        t_kiwis = [D[:, idx] for idx in p]
-        # t_kiwis = [D[:, idx] for idx in p[max_peaks]] - use this one for max peaks only
+        #t_kiwis = [D[:, idx] for idx in p]
+        t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
 
         # And extract the carrier frequencies
-        f_kiwis = f[p]
-
+        #f_kiwis = f[p]
+        f_kiwis = f[p[max_peaks]]
+        
         # AVERAGED PSD
         plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
         # plot the max n peaks with a 'o' symbol
         plt.scatter( f[p[max_peaks]] , db(spec)[p][max_peaks], marker='o', color='g' )
-        plt.axvline(x = 160.425, color = 'g', label = 'axvline - full height')
-        plt.axvline(x = 160.377, color = 'r', label = 'axvline - full height')
-        plt.axvline(x = 160.248, color = 'r', label = 'axvline - full height')
+        plt.axvline(x = 160.559, color = 'g', label = 'axvline - full height')
+        plt.axvline(x = 160.377, color = 'g', label = 'axvline - full height')
+        plt.axvline(x = 160.4595, color = 'g', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
         plt.show()
