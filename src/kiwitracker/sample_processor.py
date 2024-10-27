@@ -338,6 +338,7 @@ async def process_sample_new(
 
             channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
+            channel_idx = (np.abs(f-channel_no)).argmin()
 
             if channel_no not in noise_floors_per_channel:
                 nf = deque(maxlen=3)
