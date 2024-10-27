@@ -260,7 +260,7 @@ async def process_sample_new(
 
     N_fft = 1024  # Number of FFT channels
     N_time_PSD = 250
-    threshold = 2.2
+    # threshold = 2.2
 
     # Generate array of channel frequencies
     f = (np.fft.fftshift(np.fft.fftfreq(N_fft, 1 / Fs)) + f0) / 1e6
@@ -297,27 +297,38 @@ async def process_sample_new(
         spec = PSD.mean(axis=0)
 
         # Find peaks (note: I hand-tuned prominence)
-        p = signal.find_peaks(spec, prominence=0.001)[0] # can't go below 0.001 on windows - too many peaksI will
-        print(f"Number of peaks :  {len(p)}")
+        # p = signal.find_peaks(spec, prominence=0.000010)[0]
+        p, prom_data = signal.find_peaks(spec, prominence=0.000010)
+        prom = prom_data['prominences']
+        
+        #print(f"Number of peaks :  {len(p)}")
 
         # Extract the time series for each channel identified
         t_kiwis = [D[:, idx] for idx in p]
 
         # And extract the carrier frequencies
         f_kiwis = f[p]
-        if np.any((f_kiwis>=160.377) & (f_kiwis<=160.379)): 
-            print("peak found on target")
-        #print(f"Array of peaks(f) : {f_kiwis}")
+
+         # set how many maximum peaks to process, either 20 or len(p) which ever is smaller
+        if len(p) < 20:
+            num_of_peaks = len(p)
+        else:
+            num_of_peaks = 20
+
 
         # AVERAGED PSD
-        """ plt.figure(figsize=(24,8))
+        plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
-        plt.axvline(x = 160.268, color = 'g', label = 'axvline - full height')
+        # plot the max n peaks with a 'o' symbol
+        max_peak = np.argpartition(prom, -num_of_peaks)[-num_of_peaks:] #get top 20 or len(p) peaks
+        plt.scatter( f[p[max_peak]] , db(spec)[p][max_peak], marker='o', color='g' )
+        plt.axvline(x = 160.425, color = 'g', label = 'axvline - full height')
         plt.axvline(x = 160.377, color = 'r', label = 'axvline - full height')
+        plt.axvline(x = 160.248, color = 'r', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show() """
+        plt.show()
 
         for ii, tk in enumerate(t_kiwis):
 
@@ -335,7 +346,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = sum(nf) / len(nf)
+            threshold = (sum(nf) / len(nf)) * 4
 
             logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
