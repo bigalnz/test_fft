@@ -330,7 +330,10 @@ async def process_sample_new(
         plt.ylabel("Power dB(counts)")
         plt.show()
 
-        for ii, tk in enumerate(t_kiwis):
+        for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
+
+            # match filtered signal
+            # match_filtered = sp.signal.convolve(np.abs(t_kiwis), [1]*13, 'valid')
 
             # discard all frequencies +/- 10kHz from center frequency
             if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
@@ -338,7 +341,6 @@ async def process_sample_new(
 
             channel_str = f"{f_kiwis[ii]}"
             channel_no = channel_new(f_kiwis[ii])
-            channel_idx = (np.abs(f-channel_no)).argmin()
 
             if channel_no not in noise_floors_per_channel:
                 nf = deque(maxlen=3)
