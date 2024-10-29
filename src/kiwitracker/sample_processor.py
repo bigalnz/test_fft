@@ -301,13 +301,16 @@ async def process_sample_new(
         p, prom_data = signal.find_peaks(spec, prominence=0.000010)
         prom = prom_data['prominences']
 
+        # REMOVE PEAKS OUT OF BAND 160.110 - 161.120
+        original_indexes = np.arange(len(p))
+        p = p[(p >= np.abs(f-160.110).argmin()) & (p <= np.abs(f-161.120).argmin())]
+        removed_indexes = original_indexes[~((p >= np.abs(f-160.110).argmin()) & (p <= np.abs(f-161.120).argmin()))]
+        prom = np.delete(prom, removed_indexes)
 
         # MAX PEAKS
         # set how many maximum peaks to process, either 20 or len(p) which ever is smaller
         num_of_peaks = min(20, len(p))
         max_peaks = np.argpartition(prom, -num_of_peaks)[-num_of_peaks:] #get top 20 or len(p) peaks
-
-        #print(f"Number of peaks :  {len(p)}")
 
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
@@ -318,7 +321,7 @@ async def process_sample_new(
         f_kiwis = f[p[max_peaks]]
         
         # AVERAGED PSD
-        plt.figure(figsize=(24,8))
+        """ plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
         # plot the max n peaks with a 'o' symbol
@@ -328,12 +331,12 @@ async def process_sample_new(
         plt.axvline(x = 160.4595, color = 'g', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show()
+        plt.show()"""
 
         for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
 
             # match filtered signal
-            # match_filtered = sp.signal.convolve(np.abs(t_kiwis), [1]*13, 'valid')
+            # match_filtered = sp.signal.convolve(np.abs(tk), [1]*13, 'valid')
 
             # discard all frequencies +/- 10kHz from center frequency
             if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
@@ -351,9 +354,9 @@ async def process_sample_new(
             nf.append(noise_floor(tk))
             threshold = (sum(nf) / len(nf)) * 4
 
-            logger.debug(
+            """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
-            )
+            ) """
             
             high_samples = np.abs(tk) >= threshold
             
