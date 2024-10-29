@@ -303,8 +303,9 @@ async def process_sample_new(
 
         # REMOVE PEAKS OUT OF BAND 160.110 - 161.120
         original_indexes = np.arange(len(p))
+        pp = p
         p = p[(p >= np.abs(f-160.110).argmin()) & (p <= np.abs(f-161.120).argmin())]
-        removed_indexes = original_indexes[~((p >= np.abs(f-160.110).argmin()) & (p <= np.abs(f-161.120).argmin()))]
+        removed_indexes = original_indexes[~((pp >= np.abs(f-160.110).argmin()) & (pp <= np.abs(f-161.120).argmin()))]
         prom = np.delete(prom, removed_indexes)
 
         # MAX PEAKS
