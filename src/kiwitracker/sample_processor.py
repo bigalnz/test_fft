@@ -272,6 +272,8 @@ async def process_sample_new(
     prev_rising_edge_indices = {}
     noise_floors_per_channel = {}
 
+    stored_D = deque(maxlen=2)
+
     while True:
         samples = await samples_queue.get()
 
@@ -283,6 +285,13 @@ async def process_sample_new(
         # Reshape so we can do an FFT over an axis
         d_fft = samples.reshape((-1, N_fft))
         D = np.fft.fftshift(np.fft.fft(d_fft, axis=1), axes=(1,))
+
+        stored_D.append(D)
+
+        # is this first sample processed?
+        if len(stored_D) == 1:
+            # yes, continue reading from radio/disk
+            continue
 
         # Time tag each sample coming from a channel
         # T = np.arange(len(D)) / Fs * N_fft
@@ -315,11 +324,11 @@ async def process_sample_new(
 
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
-        t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
+        p = p[max_peaks]
+        t_kiwis = [D[:, idx] for idx in p] # use this one for max peaks only
 
         # And extract the carrier frequencies
-        #f_kiwis = f[p]
-        f_kiwis = f[p[max_peaks]]
+        f_kiwis = f[p]
         
         # AVERAGED PSD
         """ plt.figure(figsize=(24,8))
@@ -336,9 +345,12 @@ async def process_sample_new(
 
         for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
 
-            # match filtered signal
-            # match_filtered = sp.signal.convolve(np.abs(tk), [1]*13, 'valid')
+            # append the extra samples from correct channel in future
+            tk = np.append(stored_D[0][:, channel_idx], tk[:12])
 
+            # match filtered signal
+            tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
+    
             # discard all frequencies +/- 10kHz from center frequency
             if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
                 continue
@@ -353,7 +365,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = (sum(nf) / len(nf)) * 4
+            threshold = (sum(nf) / len(nf)) * 2
 
             """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
