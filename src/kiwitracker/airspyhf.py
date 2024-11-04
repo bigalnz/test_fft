@@ -118,7 +118,7 @@ def set_sample_rate(device_handle, rate):
 
 def set_default_options(device_handle):
     clibrary.airspyhf_set_hf_lna(device_handle, ctypes.c_uint8(1))  # LNA on
-    clibrary.airspyhf_set_hf_agc(device_handle, ctypes.c_uint8(0))  # AGC off
+    clibrary.airspyhf_set_hf_agc(device_handle, ctypes.c_uint8(1))  # AGC off
 
     clibrary.airspyhf_set_att(device_handle, ctypes.c_float(0.0))  # ATT 0
     clibrary.airspyhf_set_hf_att(device_handle, ctypes.c_uint8(0))  # ATT 0
