@@ -324,11 +324,11 @@ async def process_sample_new(
 
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
-        p = p[max_peaks]
-        t_kiwis = [D[:, idx] for idx in p] # use this one for max peaks only
+        t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
 
         # And extract the carrier frequencies
-        f_kiwis = f[p]
+        #f_kiwis = f[p]
+        f_kiwis = f[p[max_peaks]]
         
         # AVERAGED PSD
         """ plt.figure(figsize=(24,8))
@@ -341,7 +341,7 @@ async def process_sample_new(
         plt.axvline(x = 160.4595, color = 'g', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show()"""
+        plt.show() """
 
         for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
 
