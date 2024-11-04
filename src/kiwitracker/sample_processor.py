@@ -331,7 +331,7 @@ async def process_sample_new(
         f_kiwis = f[p[max_peaks]]
         
         # AVERAGED PSD
-        """ plt.figure(figsize=(24,8))
+        plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
         # plot the max n peaks with a 'o' symbol
@@ -341,12 +341,14 @@ async def process_sample_new(
         plt.axvline(x = 160.4595, color = 'g', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show() """
+        plt.show()
 
         for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
 
             # append the extra samples from correct channel in future
             tk = np.append(stored_D[0][:, channel_idx], tk[:12])
+            # tk = np.append(tk, stored_D[0][:12])
+            #tk = np.append(tk, stored_D[0][:12, channel_idx])
 
             # match filtered signal
             tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
