@@ -61,7 +61,7 @@ def channel_new(carrier_freq: float) -> int:
 def snr(high_samples: np.ndarray, low_samples: np.ndarray) -> float:
     noise_pwr = np.var(low_samples)
     signal_pwr = np.var(high_samples)
-    snr_db = 20 * np.log10(signal_pwr / noise_pwr)
+    snr_db = 10 * np.log10(signal_pwr / noise_pwr)
     return snr_db
 
 
@@ -300,7 +300,8 @@ async def process_sample_new(
         # 1. Reshape to (N_timestep, N_int_per_timestep, N_fft)
         # 2. Square
         # 3. Sum over N_int_per_timestep axis
-        PSD = (np.abs(D.reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
+        # PSD = (np.abs(D.reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
+        PSD = (np.abs(stored_D[0].reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
 
         # Create overall spectrum
         spec = PSD.mean(axis=0)
@@ -324,14 +325,15 @@ async def process_sample_new(
 
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
-        t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
+        # t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
+        t_kiwis = [stored_D[0][:, idx] for idx in p[max_peaks]]
 
         # And extract the carrier frequencies
         #f_kiwis = f[p]
         f_kiwis = f[p[max_peaks]]
         
         # AVERAGED PSD
-        plt.figure(figsize=(24,8))
+        """ plt.figure(figsize=(24,8))
         plt.plot(f, db(spec))
         plt.scatter(f[p], db(spec)[p], marker='x', color='#cc0000')
         # plot the max n peaks with a 'o' symbol
@@ -341,9 +343,12 @@ async def process_sample_new(
         plt.axvline(x = 160.4595, color = 'g', label = 'axvline - full height')
         plt.xlabel("Frequency [MHz]")
         plt.ylabel("Power dB(counts)")
-        plt.show()
+        plt.show() """
 
-        for ii, (channel_idx, tk) in enumerate(zip(p, t_kiwis)):
+        for ii, (channel_idx, tk) in enumerate(zip(p[max_peaks], t_kiwis)):
+
+            channel_str = f"{f_kiwis[ii]}"
+            channel_no = channel_new(f_kiwis[ii])
 
             # append the extra samples from correct channel in future
             tk = np.append(stored_D[0][:, channel_idx], tk[:12])
@@ -357,9 +362,6 @@ async def process_sample_new(
             if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
                 continue
 
-            channel_str = f"{f_kiwis[ii]}"
-            channel_no = channel_new(f_kiwis[ii])
-
             if channel_no not in noise_floors_per_channel:
                 nf = deque(maxlen=3)
                 noise_floors_per_channel[channel_no] = nf
@@ -367,7 +369,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = (sum(nf) / len(nf)) * 2
+            threshold = (sum(nf) / len(nf)) * 1.5
 
             """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
@@ -409,6 +411,10 @@ async def process_sample_new(
             # print(test_dBFS)
 
             bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+
+            # can look to add SNR back in future release
+            # snr = snr(high_samples, low_samples)
+            # snr = snr(tk[np.abs(tk) >= thres], tk[np.abs(tk) < thres] )
 
             latitude, longitude = pc.gps_module.get_current()
             res = ProcessResult(
