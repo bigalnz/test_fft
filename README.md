@@ -1,16 +1,22 @@
 # kiwitracker
 
-A project to log to standard console the beeps per minute (BPM) of a Chick Timer (CT) for Kiwi. The console output will contain background BPM, Fast Telemetry (FT) numbers, Chick Timer (CT) data sequence, SNR, dBFS and finally Latitude/Longitude.
+A project to log to standard console the beeps per minute (BPM) of a Chick Timer (CT) for New Zealands endangered Kiwi. The console output will contain background BPM, Fast Telemetry (FT) numbers, Chick Timer (CT) data sequence, signal to noise ration (SNR), decibels full scale (dBFS) and finally Latitude/Longitude.
+
+Currently the only way to decode these signals is to travel to remote parts of the bush and manually record the signal output. This is time consuming and if a predator is killing kiwi it may not be detected for several weeks. Kiwitracker allows for real time remote monitoring of signals and more granular data.
+
+It is also possible to drone mount the hardware and geo-locate Kiwi quickly by filtering GPS and dBFS data.
 
 ## Kiwi Tracker Signals
 
-Kiwi trackers emit continuous wave (CW) beeps on one of 100 channels spaced evenly between 160.120Mhz and 161.110Mhz. A list of the channel numbers and corresponding frequencies is [here](https://github.com/bigalnz/test_fft/blob/main/src/kiwitracker/freq_chart.txt).
+Kiwi trackers emit 10mW continuous wave (CW) beeps on one of 100 channels spaced evenly between 160.120Mhz and 161.110Mhz. A list of the channel numbers and corresponding frequencies is [here](https://github.com/bigalnz/test_fft/blob/main/src/kiwitracker/freq_chart.txt).
 
 Each beep is 0.017 sec long. By varying the time between beeps information is encoded in the signal in three different ways: 
 
 ## Modes of tranmission
 
 ### 1. Background Beep Rate mode
+
+The transmitter is in this mode by default. By counting the number of beeps per minute the state of the bird can be determined:
 
 * 80 BPM - Mortality mode
 * 46-48 BPM - Not incubating
@@ -31,6 +37,7 @@ Each beep is 0.017 sec long. By varying the time between beeps information is en
 
 ### 3. Fast Telemetry (FT) mode
 
+Modes 1 and 2 are easily decoded by listening to the received signal 
 
 
 Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
