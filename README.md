@@ -1,4 +1,4 @@
-# Kiwitracker
+# Kiwi Tracker
 
 A python project to log to standard console the beeps per minute (BPM) of a Chick Timer (CT) for New Zealands endangered Kiwi. The console output will contain background BPM, Fast Telemetry (FT) numbers, Chick Timer (CT) data sequence, signal to noise ration (SNR), decibels full scale (dBFS) and finally Latitude/Longitude.
 
