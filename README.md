@@ -1,6 +1,10 @@
 # kiwitracker
 
-A project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
+A project to log to standard console the beeps per minute (BPM) of a Chick Timer (CT) for Kiwi. The console output will contain background BPM, Fast Telemetry (FT) numbers, Chick Timer (CT) data sequence, SNR, dBFS and finally Latitude/Longitude.
+
+## Kiwi Tracker Signals
+
+Kiwi trackers emit continuous wave (CW) beeps on one of 100 channels spaced evenly between 160.120Mhz and 161.110Mhz. A list of the channel numbers and corresponding frequencies is [here](https://github.com/bigalnz/test_fft/blob/main/src/kiwitracker/freq_chart.txt).
 
 Suggested buffering chunk size `-c 16384` or `-c 65536` (to test)
 Suggested sample rate `-s 2.048e6` (allows covering from channel 00 (160.120Mhz), 01 (160.130).....99 (161.110Mhz) ) (Total Spectrum 0.990Mhz)
