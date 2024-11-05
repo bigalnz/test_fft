@@ -39,7 +39,13 @@ The transmitter is in this mode by default. By counting the number of beeps per 
 
 Modes 1 and 2 are easily decoded by listening to the received signal. FT mode can only be decoded by computer as it involved altering by 10ms the timing between beeps in both modes 1 and 2. 
 
-The alteration in timing decodes to:
+The fast telemetry format is five values repeating continuously. I synchronisation code either Mort, Nesting, Not nesting, Hatch or Desertion Alert. A sync value is always followed by two pairs of number XX XX.
+
+Legal nominal pulse intervals in ms are 250, 750, 1250, 1750, 2000, 3000, 3750. The delay is added to all those intervals except 250ms which is only used for double pulsing. Attached is the user manual that gives the detail on how those intervals might be heard and what they mean. Double pulsing is defined as sets of 2 pulses split by 250ms with each set of 2 pulses separated by 1750ms (from last to first).
+
+The First pair of numbers is always the days since the state (indicated by the sync code) started; Mort, Nesting, Not nesting, Hatch or Desertion Alert.
+
+The second pair of numbers changes meaning depending on the state. Mort = Battery weeks of life remaining, Nesting = 4 Day mean of most recent activity data, Not nesting = Battery weeks of life remaining, Hatch = 4 Day mean of most recent activity data, Desertion Alert = Activity data last night. Activity data is in lots 10 min periods the bird was considered to be active in the previous 24hrs. So a value of 15 = 15*10=150min or 2hrs 30min.
 
 Fast Telemetry table:
 
