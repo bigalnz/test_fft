@@ -6,11 +6,11 @@ A project to log to standard console the beeps per minute (BPM) of a Chick Timer
 
 Kiwi trackers emit continuous wave (CW) beeps on one of 100 channels spaced evenly between 160.120Mhz and 161.110Mhz. A list of the channel numbers and corresponding frequencies is [here](https://github.com/bigalnz/test_fft/blob/main/src/kiwitracker/freq_chart.txt).
 
-Suggested buffering chunk size `-c 16384` or `-c 65536` (to test)
-Suggested sample rate `-s 2.048e6` (allows covering from channel 00 (160.120Mhz), 01 (160.130).....99 (161.110Mhz) ) (Total Spectrum 0.990Mhz)
-(Not configurable but FYI processing 2.56e5 samples at a time)
+Each beep is 0.017 sec long. By varying the time between beeps information is encoded in the signal in three different ways. 
 
-## Background modes of transmitter
+## Modes of tranmission
+
+## 1. Background Beep Rate
 
 * 80 BPM - Mortality mode
 * 46-48 BPM - Not incubating
