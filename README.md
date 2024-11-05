@@ -10,7 +10,7 @@ Each beep is 0.017 sec long. By varying the time between beeps information is en
 
 ## Modes of tranmission
 
-## 1. Background Beep Rate
+### 1. Background Beep Rate
 
 * 80 BPM - Mortality mode
 * 46-48 BPM - Not incubating
