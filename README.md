@@ -2,7 +2,7 @@
 
 A project to log to standard console the beeps per minute (BPM) of a Chick Timer (CT) for New Zealands endangered Kiwi. The console output will contain background BPM, Fast Telemetry (FT) numbers, Chick Timer (CT) data sequence, signal to noise ration (SNR), decibels full scale (dBFS) and finally Latitude/Longitude.
 
-Currently the only way to decode these signals is to travel to remote parts of the bush and manually record the signal output. This is time consuming and if a predator is killing kiwi it may not be detected for several weeks. Kiwitracker allows for real time remote monitoring of signals and more granular data. A good video of the the terrain involved and the beeps emitted is on [Kiwi Diaries](https://www.youtube.com/watch?v=DQILKrjDUYc&t=5s )
+Currently the only way to decode these signals is to travel to remote parts of the bush and manually record the signal output. This is time consuming and if a predator is killing kiwi it may not be detected for several weeks. Kiwitracker allows for real time remote monitoring of signals and more granular data. A good video of the the terrain involved and the beeps emitted is on [Fiordland Kiwi Diaries](https://www.youtube.com/watch?v=DQILKrjDUYc&t=5s )
 
 It is also possible to drone mount the hardware and geo-locate Kiwi quickly by filtering GPS and dBFS data.
 
