@@ -410,7 +410,11 @@ async def process_sample_new(
             # test_dBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
             # print(test_dBFS)
 
-            bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+            try: 
+                bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+            except:
+                logger.info(f"[{channel_no}] division by 0 error on cnt=={cnt} and ii=={ii}")
+
 
             # can look to add SNR back in future release
             # snr = snr(high_samples, low_samples)
