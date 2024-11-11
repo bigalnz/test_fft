@@ -323,14 +323,25 @@ async def process_sample_new(
         num_of_peaks = min(20, len(p))
         max_peaks = np.argpartition(prom, -num_of_peaks)[-num_of_peaks:] #get top 20 or len(p) peaks
 
+
+        # filter `max_peaks`:
+        # 1.) if for the channel number there are more than one frequency, discard all frequencies for that channel
+        # 2.) any channel less than 0 or any channel that is over 99 - discard
+
+        grouped_peaks = {}
+        for peak in max_peaks:
+            channel_no = channel_new(f[p[peak]])
+            grouped_peaks.setdefault(channel_no, []).append(peak)
+        max_peaks = [v[0] for k, v in grouped_peaks.items() if len(v) == 1 and (0 <= k <= 99)]
+
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
         # t_kiwis = [D[:, idx] for idx in p[max_peaks]] # use this one for max peaks only
-        t_kiwis = [stored_D[0][:, idx] for idx in p[max_peaks]]
+        # t_kiwis = [stored_D[0][:, idx] for idx in p[max_peaks]]
 
         # And extract the carrier frequencies
         #f_kiwis = f[p]
-        f_kiwis = f[p[max_peaks]]
+        # f_kiwis = f[p[max_peaks]]
         
         # AVERAGED PSD
         """ plt.figure(figsize=(24,8))
@@ -345,13 +356,13 @@ async def process_sample_new(
         plt.ylabel("Power dB(counts)")
         plt.show() """
 
-        for ii, (channel_idx, tk) in enumerate(zip(p[max_peaks], t_kiwis)):
+        for channel_idx in p[max_peaks]:
 
-            channel_str = f"{f_kiwis[ii]}"
-            channel_no = channel_new(f_kiwis[ii])
+            channel_str = f'{f[channel_idx]}'
+            channel_no = channel_new(f[channel_idx])
 
             # append the extra samples from correct channel in future
-            tk = np.append(stored_D[0][:, channel_idx], tk[:12])
+            tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx][:12])
             # tk = np.append(tk, stored_D[0][:12])
             #tk = np.append(tk, stored_D[0][:12, channel_idx])
 
@@ -359,7 +370,7 @@ async def process_sample_new(
             tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
     
             # discard all frequencies +/- 10kHz from center frequency
-            if freqs_to_discard[0] <= f_kiwis[ii] <= freqs_to_discard[1]:
+            if freqs_to_discard[0] <= f[channel_idx] <= freqs_to_discard[1]:
                 continue
 
             if channel_no not in noise_floors_per_channel:
@@ -410,11 +421,7 @@ async def process_sample_new(
             # test_dBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
             # print(test_dBFS)
 
-            try: 
-                bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
-            except:
-                logger.info(f"[{channel_no}] division by 0 error on cnt=={cnt} and ii=={ii}")
-
+            bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             # can look to add SNR back in future release
             # snr = snr(high_samples, low_samples)
@@ -424,7 +431,7 @@ async def process_sample_new(
             res = ProcessResult(
                 date=datetime.now(),
                 channel=channel_no,
-                carrier_freq=f_kiwis[ii],
+                carrier_freq=f[channel_idx],
                 BPM=bpm,
                 DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx])),
                 CLIPPING=-1,
