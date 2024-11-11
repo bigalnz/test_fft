@@ -26,7 +26,7 @@ from kiwitracker.gps import GPSDummy, GPSReal
 from kiwitracker.logging import setup_logging
 from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
-                                          process_sample, process_sample_new)
+                                          process_sample_new)
 
 # tracemalloc.start()
 
