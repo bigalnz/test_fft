@@ -427,25 +427,28 @@ async def process_sample_new(
             # snr = snr(high_samples, low_samples)
             # snr = snr(tk[np.abs(tk) >= thres], tk[np.abs(tk) < thres] )
 
-            latitude, longitude = pc.gps_module.get_current()
-            res = ProcessResult(
-                date=datetime.now(),
-                channel=channel_no,
-                carrier_freq=f[channel_idx],
-                BPM=bpm,
-                DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx])),
-                CLIPPING=-1,
-                BEEP_DURATION=-1,
-                SNR=-1,
-                latitude=latitude,
-                longitude=longitude,
-            )
+            if not (10.0 <= bpm <= 85.0):
+                logger.debug(f'[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} not in interval from 10.0 to 85.0')
+            else:
+                latitude, longitude = pc.gps_module.get_current()
+                res = ProcessResult(
+                    date=datetime.now(),
+                    channel=channel_no,
+                    carrier_freq=f[channel_idx],
+                    BPM=bpm,
+                    DBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx])),
+                    CLIPPING=-1,
+                    BEEP_DURATION=-1,
+                    SNR=-1,
+                    latitude=latitude,
+                    longitude=longitude,
+                )
 
-            logger.info(
-                f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}"
-            )
+                logger.info(
+                    f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}"
+                )
 
-            await queue_output.put(res)
+                await queue_output.put(res)
 
             prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
 
@@ -467,14 +470,14 @@ def is_bpm_valid(normalized_bpm: float, real_bpm: float) -> bool:
         case 16.0:
             return 14.42 <= real_bpm <= 17.0
         case _:
-            raise ValueError(f"Unknown normalized BPM value: {normalized_bpm=}/{real_bpm=}")
+            raise ValueError(f"Unknown normalized BPM value: {normalized_bpm=:.2f}/{real_bpm=:.2f}")
 
 
 def normalize_bpm(bpm: float, valid_bpms=(80.0, 48.0, 30.0, 20.0, 16.0)) -> float:
     normalized_bpm = min(valid_bpms, key=lambda k: abs(k - bpm))
 
     if not is_bpm_valid(normalized_bpm, bpm):
-        raise ValueError(f"BPM not in valid range: {normalized_bpm=}/{bpm=}")
+        raise ValueError(f"BPM not in valid range: {normalized_bpm=:.2f}/{bpm=:.2f}")
 
     return normalized_bpm
 
@@ -500,7 +503,7 @@ async def fast_telemetry(
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: [{ch}/{cf}] partial state found (from {process_result.BPM}) {k=}/{v=}")
+            logger.debug(f"FT: [{ch}/{cf}] partial state found (from {process_result.BPM:.2f}) {k=}/{v=}")
 
             return k, process_result.SNR, process_result.DBFS
 
