@@ -497,7 +497,7 @@ async def fast_telemetry(
             try:
                 normalized_bpm = normalize_bpm(process_result.BPM)
             except ValueError as err:
-                logger.error(
+                logger.debug(
                     f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] fast_telemetry._wait_for_state(): {err}"
                 )
                 continue
@@ -608,7 +608,7 @@ async def chick_timer(
 
             except ValueError as err:
                 # logger.exception(err)
-                logger.error(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer._wait_for_start(): {err}")
+                logger.debug(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer._wait_for_start(): {err}")
 
     async def _wait_specific_num_of_beeps(num: int) -> None:
         while num > 0:
@@ -693,7 +693,7 @@ async def chick_timer(
         except ChickTimerProcessingError as err:
             logger.exception(err)
         except ValueError as err:
-            logger.error(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
+            logger.debug(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
             # logger.exception(err)
 
         end_dt = datetime.now()
