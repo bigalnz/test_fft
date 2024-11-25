@@ -457,18 +457,18 @@ async def process_sample_new(
 
         samples_queue.task_done()
 
-def is_bpm_valid(normalized_bpm: float, real_bpm: float) -> bool:
+def is_bpm_valid(normalized_bpm: float, real_bpm: float, tolerance: float = 0.5) -> bool:
     match normalized_bpm:
         case 80.0:
-            return 66.41 <= real_bpm <= 81.0
+            return (67.42 - tolerance) <= real_bpm <= (80 + tolerance)
         case 48.0:
-            return 42.16 <= real_bpm <= 49.0
+            return (43.17 - tolerance) <= real_bpm <= (48.0 + tolerance)
         case 30.0:
-            return 27.03 <= real_bpm <= 31.0
+            return (28.04 - tolerance) <= real_bpm <= (30.0 + tolerance)
         case 20.0:
-            return 18.1082 <= real_bpm <= 21.0
+            return (19.11 - tolerance) <= real_bpm <= (20.0 + tolerance)
         case 16.0:
-            return 14.42 <= real_bpm <= 17.0
+            return (15.42 - tolerance) <= real_bpm <= (16.0 + tolerance)
         case _:
             raise ValueError(f"Unknown normalized BPM value: {normalized_bpm=:.2f}/{real_bpm=:.2f}")
 
