@@ -380,7 +380,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = (sum(nf) / len(nf)) * 1.5
+            threshold = (sum(nf) / len(nf)) * 2
 
             """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
@@ -427,7 +427,7 @@ async def process_sample_new(
             # snr = snr(high_samples, low_samples)
             # snr = snr(tk[np.abs(tk) >= thres], tk[np.abs(tk) < thres] )
 
-            if not (10.0 <= bpm <= 85.0):
+            if not (13.0 <= bpm <= 81.0):
                 logger.debug(f'[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} not in interval from 10.0 to 85.0')
             else:
                 latitude, longitude = pc.gps_module.get_current()
