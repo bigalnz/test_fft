@@ -445,7 +445,7 @@ async def process_sample_new(
                 )
 
                 logger.info(
-                    f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}"
+                    f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}/{channel_idx=}"
                 )
 
                 await queue_output.put(res)
