@@ -503,7 +503,7 @@ async def fast_telemetry(
                 continue
 
             k, v = min(FT_DICT[normalized_bpm].items(), key=lambda t: abs(t[1] - process_result.BPM))
-            logger.debug(f"FT: [{ch}/{cf}] partial state found (from {process_result.BPM:.2f}) {k=}/{v=}")
+            logger.debug(f"FT [{ch:>3}/{cf:>10}] partial state found (from {process_result.BPM:.2f}) {k=}/{v=}")
 
             return k, process_result.SNR, process_result.DBFS
 
@@ -520,7 +520,7 @@ async def fast_telemetry(
             if isinstance(mode, str):
                 snrs.append(s)
                 dbfs.append(d)
-                logger.debug(f"FT: [{ch}/{cf}] (Waiting first string) String found {mode=}")
+                logger.debug(f"FT [{ch:>3}/{cf:>10}] (Waiting first string) String found {mode=}")
                 break
 
         start_dt = datetime.now()
@@ -536,9 +536,9 @@ async def fast_telemetry(
                     digits.append(digit)
                     snrs.append(s)
                     dbfs.append(d)
-                    logger.debug(f"FT: [{ch}/{cf}] (Waiting for 4 digits) Digits so far: {digits=}")
+                    logger.debug(f"FT [{ch:>3}/{cf:>10}] (Waiting for 4 digits) Digits so far: {digits=}")
                 else:
-                    raise ValueError(f"FT: [{ch}/{cf}] Number was expected but {digit} was received.")
+                    raise ValueError(f"FT [{ch:>3}/{cf:>10}] Number was expected but {digit} was received.")
         except ValueError as err:
             logger.exception(err)
             continue
@@ -559,7 +559,7 @@ async def fast_telemetry(
         d1 = int(f"{digits[0]}{digits[1]}")
         d2 = int(f"{digits[2]}{digits[3]}")
 
-        logger.info(f"FT: [{ch}/{cf}] state found {mode}-{d1}-{d2}")
+        logger.info(f"FT [{ch:>3}/{cf:>10}] state found {mode}-{d1}-{d2}")
 
         r = FTResult(
             channel=ch,
@@ -676,24 +676,24 @@ async def chick_timer(
                 if start_dt is None:
                     start_dt = datetime.now()
 
-                logger.debug(f"CT: Found Start BPM for [{n}]!")
+                logger.debug(f"CT [{ch:>3}/{cf:>10}]: Found Start BPM for [{n}]!")
 
                 first_digit = await _count_beeps_till(16.0, snrs, dbfs)
-                logger.debug(f"CT: [{n}] Found First digit {first_digit=}")
+                logger.debug(f"CT [{ch:>3}/{cf:>10}]: [{n}] Found First digit {first_digit=}")
 
                 second_digit = await _count_beeps_till(16.0, snrs, dbfs)
-                logger.debug(f"CT: [{n}] Found Second digit {second_digit=}")
+                logger.debug(f"CT [{ch:>3}/{cf:>10}]: [{n}] Found Second digit {second_digit=}")
 
-                logger.info(f"CT: Found {n}={first_digit}{second_digit}]")
+                logger.info(f"CT [{ch:>3}/{cf:>10}]: Found {n}={first_digit}{second_digit}]")
 
                 out[n] = f"{first_digit}{second_digit}"
 
             decoding_success = True
-            logger.info(f"CT: Complete CT found! {out}")
+            logger.info(f"CT [{ch:>3}/{cf:>10}]: Complete CT found! {out}")
         except ChickTimerProcessingError as err:
             logger.exception(err)
         except ValueError as err:
-            logger.debug(f"[{channel_new(pc.carrier_freq)}/{pc.carrier_freq}] chick_timer: {err}")
+            logger.debug(f"CT [{ch:>3}/{cf:>10}]: {err}")
             # logger.exception(err)
 
         end_dt = datetime.now()
@@ -730,5 +730,5 @@ async def chick_timer(
             await q.put(r)
 
         if not decoding_success:
-            logger.info("CT: Skiping next 100 beeps due to failed decoding!")
+            logger.info(f"CT [{ch:>3}/{cf:>10}]: Skiping next 100 beeps due to failed decoding!")
             await _wait_specific_num_of_beeps(100)
