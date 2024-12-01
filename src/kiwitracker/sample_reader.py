@@ -215,7 +215,7 @@ def main():
                 source_gen=source_file(
                     filename=args.infile,
                     N=process_config.num_samples_to_process,
-                    num_chunks=100,
+                    num_chunks=999,
                 ),
                 task_results=results_pipeline,
             )
