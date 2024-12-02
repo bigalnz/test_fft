@@ -271,6 +271,7 @@ async def process_sample_new(
     cnt = 0
     prev_rising_edge_indices = {}
     noise_floors_per_channel = {}
+    channel_no_idxs = {}
 
     stored_D = deque(maxlen=2)
 
@@ -361,6 +362,14 @@ async def process_sample_new(
             channel_str = f'{f[channel_idx]}'
             channel_no = channel_new(f[channel_idx])
 
+            if channel_no not in channel_no_idxs:
+                channel_no_idxs[channel_no] = channel_idx
+
+            stored_channel_idx = channel_no_idxs[channel_no]
+            if not ((stored_channel_idx - 1) <= channel_idx <= (stored_channel_idx + 1)):
+                logger.debug(f'[{channel_no:>3}/{channel_str:>10}]: {channel_idx=} outside range <{stored_channel_idx - 1}, {stored_channel_idx + 1}>, skipping...')
+                continue
+
             # append the extra samples from correct channel in future
             tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx][:12])
             # tk = np.append(tk, stored_D[0][:12])
@@ -428,7 +437,7 @@ async def process_sample_new(
             # snr = snr(tk[np.abs(tk) >= thres], tk[np.abs(tk) < thres] )
 
             if not (13.0 <= bpm <= 81.0):
-                logger.debug(f'[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} not in interval from 10.0 to 85.0')
+                logger.debug(f'[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} not in interval from 13.0 to 81.0')
             else:
                 latitude, longitude = pc.gps_module.get_current()
                 res = ProcessResult(
