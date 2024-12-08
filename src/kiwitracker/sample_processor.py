@@ -268,12 +268,12 @@ async def process_sample_new(
     # Time tag each sample
     # t = np.arange(pc.num_samples_to_process) / Fs
 
-    cnt = 0
+    cnt = -1
     prev_rising_edge_indices = {}
     noise_floors_per_channel = {}
     channel_no_idxs = {}
 
-    stored_D = deque(maxlen=2)
+    stored_D = deque(maxlen=3)
 
     while True:
         samples = await samples_queue.get()
@@ -283,15 +283,18 @@ async def process_sample_new(
             samples_queue.task_done()
             break
 
+        # increase counter to correctly compute BPMs
+        cnt += 1
+
         # Reshape so we can do an FFT over an axis
         d_fft = samples.reshape((-1, N_fft))
         D = np.fft.fftshift(np.fft.fft(d_fft, axis=1), axes=(1,))
 
         stored_D.append(D)
 
-        # is this first sample processed?
-        if len(stored_D) == 1:
-            # yes, continue reading from radio/disk
+        # we need full 3 chunks to work correctly
+        if len(stored_D) != 3:
+            # we don't have 3 chunks stored yet, continue reading from radio/disk
             continue
 
         # Time tag each sample coming from a channel
@@ -302,7 +305,7 @@ async def process_sample_new(
         # 2. Square
         # 3. Sum over N_int_per_timestep axis
         # PSD = (np.abs(D.reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
-        PSD = (np.abs(stored_D[0].reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1)
+        PSD = (np.abs(stored_D[1].reshape((N_time_PSD, -1, N_fft))) ** 2).mean(axis=1) # XXX[0]
 
         # Create overall spectrum
         spec = PSD.mean(axis=0)
@@ -370,18 +373,16 @@ async def process_sample_new(
                 logger.debug(f'[{channel_no:>3}/{channel_str:>10}]: {channel_idx=} outside range <{stored_channel_idx - 1}, {stored_channel_idx + 1}>, skipping...')
                 continue
 
-            # append the extra samples from correct channel in future
-            tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx][:12])
-            # tk = np.append(tk, stored_D[0][:12])
-            #tk = np.append(tk, stored_D[0][:12, channel_idx])
-
-            # match filtered signal
-            tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
-    
             # discard all frequencies +/- 10kHz from center frequency
             if freqs_to_discard[0] <= f[channel_idx] <= freqs_to_discard[1]:
                 continue
 
+            # append the extra samples from correct channel in future
+            tk = np.append(stored_D[1][:, channel_idx], stored_D[2][:, channel_idx][:12])  # XXX[0] [1]
+
+            # match filtered signal
+            tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
+    
             if channel_no not in noise_floors_per_channel:
                 nf = deque(maxlen=3)
                 noise_floors_per_channel[channel_no] = nf
@@ -402,35 +403,57 @@ async def process_sample_new(
                 # no rising index in array, continue
                 continue
 
-            if channel_no not in prev_rising_edge_indices:
-                prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
-                continue
+            adjusted_cnt = cnt
+
+            # # if rising_edge_idx == 0 we might have "sliced beep", so test for that:
+            # if rising_edge_idx == 0:
+            #     print('#' * 20, f'{rising_edge_idx=}')
+            #     tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx])
+            #     tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
+            #     high_samples = np.abs(tk) >= threshold
+
+            #     rising_edge_idx = index_of(high_samples, True)
+
+            #     assert rising_edge_idx != -1, "Rising edge index not found in sliced beep(?)"
+
+            #     # rising edge is found in (current-2) chunk, so adjust cnt for it
+            #     if rising_edge_idx < 250:
+            #         adjusted_cnt -= 1
+            #     else:
+            #         rising_edge_idx -= 250
+
+
+            # if rising_edge_idx == 0 we have 3 possible cases:
+            # 1.) previous_rising_idx for channel doesn't exist => that means rising_edge_idx=0 is really idx 0
+            # 2.) previous_rising_idx for channel exists and previous_cnt == cnt - 1 => that means we need to ignore this rising_edge_idx
+            # 3.) previous_rising_idx for channel exists and previous_cnt != cnt - 1 => 
+            #       that means rising_edge_idx started to rise in previous chunk but we didn't registered it as a peak
+            #       so recompute rising_edge_idx
+            if rising_edge_idx == 0:
+                if channel_no not in prev_rising_edge_indices:
+                    # case 1.)
+                    pass
+                elif prev_rising_edge_indices[channel_no][1] == cnt - 1:
+                    # case 2.)
+                    continue
+                else:
+                    # case 3.)
+                    tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx][:12])
+                    tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
+                    high_samples = np.abs(tk) >= threshold            
+                    rising_edge_idx = index_of(high_samples, True)
+                    adjusted_cnt = cnt - 1
 
             falling_edge_idx = 250 - index_of(high_samples[::-1], True)
+
+            if channel_no not in prev_rising_edge_indices:
+                prev_rising_edge_indices[channel_no] = (rising_edge_idx, adjusted_cnt)
+                continue
 
             prev = prev_rising_edge_indices.get(channel_no)
             assert prev is not None, "Previous rising index not found"
 
-            # test if current beep is "sliced"
-            # "sliced" means that rising index in current sample is 0 AND
-            # the length of the beep is less than 13 (out of 250)
-            if rising_edge_idx == 0:
-                if falling_edge_idx < 13:
-                    # we are in slice!
-                    # nothing to be done here, just read next sample
-                    continue
-
-                if falling_edge_idx > 15:
-                    # bogus beep? bad signal?
-                    continue
-
-            # at this point, we know we're not in "sliced" beep and we have 
-            # rising_edge_idx and falling_edge_idx computed
-
-            # test_dBFS=dBFS(np.abs(tk[rising_edge_idx:falling_edge_idx]))
-            # print(test_dBFS)
-
-            bpm = 60.0 / (((rising_edge_idx + (250 * cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
+            bpm = 60.0 / (((rising_edge_idx + (250 * adjusted_cnt)) - (prev[0] + 250 * prev[1])) / 750.0)
 
             # can look to add SNR back in future release
             # snr = snr(high_samples, low_samples)
@@ -454,15 +477,12 @@ async def process_sample_new(
                 )
 
                 logger.info(
-                    f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{prev=}/{channel_idx=}"
+                    f"[{channel_no:>3}/{channel_str:>10}] BPM: {bpm:<3.2f} | POS: {latitude} {longitude} | dBFS: {res.DBFS:0.0f} | {rising_edge_idx=}/{cnt=}/{adjusted_cnt=}/{prev=}/{channel_idx=}"
                 )
 
                 await queue_output.put(res)
 
-            prev_rising_edge_indices[channel_no] = (rising_edge_idx, cnt)
-
-        # increase counter to correctly compute BPMs
-        cnt += 1
+            prev_rising_edge_indices[channel_no] = (rising_edge_idx, adjusted_cnt)
 
         samples_queue.task_done()
 
