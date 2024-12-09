@@ -405,39 +405,18 @@ async def process_sample_new(
 
             adjusted_cnt = cnt
 
-            # # if rising_edge_idx == 0 we might have "sliced beep", so test for that:
-            # if rising_edge_idx == 0:
-            #     print('#' * 20, f'{rising_edge_idx=}')
-            #     tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx])
-            #     tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
-            #     high_samples = np.abs(tk) >= threshold
-
-            #     rising_edge_idx = index_of(high_samples, True)
-
-            #     assert rising_edge_idx != -1, "Rising edge index not found in sliced beep(?)"
-
-            #     # rising edge is found in (current-2) chunk, so adjust cnt for it
-            #     if rising_edge_idx < 250:
-            #         adjusted_cnt -= 1
-            #     else:
-            #         rising_edge_idx -= 250
-
-
-            # if rising_edge_idx == 0 we have 3 possible cases:
-            # 1.) previous_rising_idx for channel doesn't exist => that means rising_edge_idx=0 is really idx 0
-            # 2.) previous_rising_idx for channel exists and previous_cnt == cnt - 1 => that means we need to ignore this rising_edge_idx
-            # 3.) previous_rising_idx for channel exists and previous_cnt != cnt - 1 => 
-            #       that means rising_edge_idx started to rise in previous chunk but we didn't registered it as a peak
-            #       so recompute rising_edge_idx
+            # if rising_edge_idx == 0 we have 2 possible cases:
+            # 1.) previous_rising_idx for channel exists and previous_cnt == cnt - 1 => that means we need to ignore this rising_edge_idx
+            # 2.) previous_rising_idx for channel exists and previous_cnt != cnt - 1 OR
+            #     previous_rising_idx for channel doisn't exist => 
+            #         that means rising_edge_idx started to rise in previous chunk but we didn't registered it as a peak
+            #         so recompute rising_edge_idx
             if rising_edge_idx == 0:
-                if channel_no not in prev_rising_edge_indices:
+                if (channel_no in prev_rising_edge_indices) and (prev_rising_edge_indices[channel_no][1] == cnt - 1):
                     # case 1.)
-                    pass
-                elif prev_rising_edge_indices[channel_no][1] == cnt - 1:
-                    # case 2.)
                     continue
                 else:
-                    # case 3.)
+                    # case 2.)
                     tk = np.append(stored_D[0][:, channel_idx], stored_D[1][:, channel_idx][:12])
                     tk = signal.convolve(np.abs(tk), [1]*13, 'valid')
                     high_samples = np.abs(tk) >= threshold            
