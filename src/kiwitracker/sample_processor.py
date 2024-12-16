@@ -312,7 +312,7 @@ async def process_sample_new(
 
         # Find peaks (note: I hand-tuned prominence)
         # p = signal.find_peaks(spec, prominence=0.000010)[0]
-        p, prom_data = signal.find_peaks(spec, prominence=0.000010)
+        p, prom_data = signal.find_peaks(spec, prominence=0.000005)
         prom = prom_data['prominences']
 
         # REMOVE PEAKS OUT OF BAND 160.110 - 161.120
@@ -390,7 +390,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = (sum(nf) / len(nf)) * 2
+            threshold = (sum(nf) / len(nf)) * 1.5
 
             """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
