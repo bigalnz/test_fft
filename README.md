@@ -122,29 +122,37 @@ kiwitracker --help
 Which should display the following:
 
 ```bash
-usage: kiwitracker [-h] [-f INFILE] [-o OUTFILE] [-m MAX_SAMPLES] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--carrier CARRIER]
+usage: kiwitracker [-h] [-f INFILE] [-db DB] [-d] [-o OUTFILE] [-m MAX_SAMPLES] [--scan [SCAN]] [--no-use-gps] [--radio [{rtl,airspy,dummy}]] [-c CHUNK_SIZE] [-s SAMPLE_RATE] [--center-freq CENTER_FREQ] [-g GAIN] [--bias-tee]
+                   [-log LOGLEVEL] [--carrier [CARRIER]]
 
 options:
   -h, --help            show this help message and exit
-
   -f INFILE, --from-file INFILE
                         Read samples from the given filename and process them
-
+  -db DB, --database DB
+                        SQLite database where to store processed results. Defaults to `main.db`. Environment variable KIWITRACKER_DB has priority.
+  -d, --delete-database
+                        If SQLite database file exists upon start, it is deleted.
   -o OUTFILE, --outfile OUTFILE
                         Read samples from the device and save to the given filename
-
   -m MAX_SAMPLES, --max-samples MAX_SAMPLES
                         Number of samples to read when "-o/--outfile" is specified
+  --scan [SCAN]         Scan periodically for frequencies 0-240 (in minutes, default: None). 0 means scan only upon startup, cannot be used with --carrier flag
+  --no-use-gps          Set this flag to not use GPS module
+  --radio [{rtl,airspy,dummy}]
+                        type of radio to be used (default: rtl), ignored if reading samples from disk.
 
 Sampling:
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
                         Chunk size for sdr.read_samples (default: 65536)
-
   -s SAMPLE_RATE, --sample-rate SAMPLE_RATE
                         SDR sample rate (default: 1024000.0)
   --center-freq CENTER_FREQ
                         SDR center frequency (default: 160270968)
-
+  -g GAIN, --gain GAIN  SDR gain (default: 7.7)
+  --bias-tee            Enable bias tee
+  -log LOGLEVEL, --loglevel LOGLEVEL
+                        Provide logging level. Example --loglevel debug, default=warning
   -g GAIN, --gain GAIN  SDR gain (default: 7.7)
 
 Processing:
