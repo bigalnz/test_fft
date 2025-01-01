@@ -1,7 +1,8 @@
 import ctypes
 import time
 from logging import getLogger
-
+import os
+import platform
 import numpy
 
 """
@@ -31,9 +32,10 @@ class AirspyHfTransfer(ctypes.Structure):
         ("dropped_samples", ctypes.c_uint64),
     ]
 
-
-#clibrary = ctypes.CDLL("libairspyhf.so")  # setup instance of the ctypes ref - *nix
-clibrary = ctypes.CDLL("C:/Users/AlGrant/andrej_branch/test_fft/airspyhf.dll")  # setup instance of the ctypes ref - Windows
+if (platform.system() == "Linux"):
+    clibrary = ctypes.CDLL("libairspyhf.so")  # setup instance of the ctypes ref - *nix
+else:
+    clibrary = ctypes.CDLL("C:/Users/AlGrant/andrej_branch/test_fft/airspyhf.dll")  # setup instance of the ctypes ref - Windows
 
 # airspyhf_lib_version
 clibrary.airspyhf_lib_version.restype = None  # define the return type of the c function using python type 'None'
