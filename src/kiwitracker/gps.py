@@ -26,10 +26,11 @@ class GPSReal(GPSBase):
     """
 
     def connect(self):
-        gpsd.connect()
+        gpsd.connect(host="127.0.0.1", port=2947)
 
     def get_current(self):
-        packet = gpsd.connect()
+        #packet = gpsd.connect()
+        packet = gpsd.get_current()
         return packet.lat, packet.lon
 
 
