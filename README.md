@@ -38,7 +38,7 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
       Currently the --center option takes one parameter, the center frequency, i.e. 160425000 Hz.
       This feature should be modified to handle nargs, where
       --center 16042500 will be the center freq for the SDR
-      --center <freq1>,<freq2>,<interval in seconds>
+      --center freq1,freq2,interval in seconds
       --center 160425000,160725000,3600 would mean swap center frequencies every 3600 seconds
 - [x] Add option to set an array of carriers --carrier [160707800, 160338000, .... ] (max 6 freqs)
 - [x] Add option to support both RTLSDR and SDRPlay devices "--radio airspy" , "--radio rtl"
