@@ -10,7 +10,8 @@ def _setup_logging_alembic(level="INFO"):
     ch = logging.StreamHandler()
     ch.setLevel(level)
 
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(filename)s - %(levelname)s - %(message)s")
+    #formatter = logging.Formatter("%(asctime)s - %(name)s - %(filename)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(message)s")
     ch.setFormatter(formatter)
 
     l.addHandler(ch)
