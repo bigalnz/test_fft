@@ -113,6 +113,7 @@ def main():
     s_group.add_argument(
         "--center-freq",
         dest="center_freq",
+        nargs='*'
         type=float,
         default=SampleConfig.center_freq,
         help="SDR center frequency (default: %(default)s)",
