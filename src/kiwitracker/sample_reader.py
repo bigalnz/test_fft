@@ -113,7 +113,7 @@ def main():
     s_group.add_argument(
         "--center-freq",
         dest="center_freq",
-        nargs='*'
+        nargs="+",
         type=float,
         default=SampleConfig.center_freq,
         help="SDR center frequency (default: %(default)s)",
@@ -185,11 +185,12 @@ def main():
 
     sample_config = SampleConfig(
         sample_rate=args.sample_rate,
-        center_freq=args.center_freq,
+        center_freq=args.center_freq[0],
+        alternate_center_freq=args.center_freq[1],
         gain=args.gain,
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
-        scan_interval=args.scan,
+        scan_interval=args.center_freq[2],
     )
 
     process_config = ProcessConfig(
