@@ -32,6 +32,13 @@ from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
 
 logger = logging.getLogger("KiwiTracker")
 
+async def swap_frequencies(config):
+    """Swap center and alternate frequency at a fixed interval."""
+    while True:
+        await asyncio.sleep(config.freq_change_interval)
+        config.center_freq, config.alternate_freq = config.alternate_freq, config.center_freq
+        print(f"[SWAP] center_freq = {config.center_freq}, alternate_freq = {config.alternate_freq}")
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -213,14 +220,8 @@ def main():
     )
 
     if sample_config.freq_change_interval > 0:
-        async def timer(sample_config, interval, callback):
-            while True:
-                await asyncio.sleep(sample_config.freq_change_interval)
-                await self.start_event()
-        
-        async def start_event(sample_config):
-            print(f" ****************** Changing Freq ********************")
-            sample_config.alternate_freq, sample_config.center_freq = sample_config.center_freq, sample_config.alternate_freq # Do the swap
+        asyncio.create_task(swap_frequencies(sample_config))
+
 
     if args.infile is not None:
         # import cProfile
