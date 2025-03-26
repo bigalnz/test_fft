@@ -113,10 +113,23 @@ def main():
     s_group.add_argument(
         "--center-freq",
         dest="center_freq",
-        nargs="+",
         type=float,
         default=SampleConfig.center_freq,
         help="SDR center frequency (default: %(default)s)",
+    )
+    s_group.add_argument(
+        "--alternate-freq",
+        dest="alternate_freq",
+        type=float,
+        default=SampleConfig.alternate_freq,
+        help="SDR alternate center frequency (default: %(default)s)",
+    )
+    s_group.add_argument(
+        "--freq-change-interval",
+        dest="freq_change_interval",
+        type=float,
+        default=SampleConfig.freq_change_interval,
+        help="SDR scan interval to change center frequancy for Airspy HF (in seconds) (default: %(default)s)",
     )
     s_group.add_argument(
         "-g",
@@ -185,12 +198,12 @@ def main():
 
     sample_config = SampleConfig(
         sample_rate=args.sample_rate,
-        center_freq=args.center_freq[0],
-        alternate_center_freq=args.center_freq[1],
+        center_freq=args.center_freq,
+        alternate_freq=args.alternate_freq,
+        freq_change_interval=args.freq_change_interval,
         gain=args.gain,
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
-        scan_interval=args.center_freq[2],
     )
 
     process_config = ProcessConfig(
@@ -198,6 +211,16 @@ def main():
         carrier_freq=args.carrier,
         gps_module=gps_module,
     )
+
+    if sample_config.freq_change_interval > 0:
+        async def timer(sample_config, interval, callback):
+            while True:
+                await asyncio.sleep(sample_config.freq_change_interval)
+                await self.start_event()
+        
+        async def start_event(sample_config):
+            print(f" ****************** Changing Freq ********************")
+            sample_config.alternate_freq, sample_config.center_freq = sample_config.center_freq, sample_config.alternate_freq # Do the swap
 
     if args.infile is not None:
         # import cProfile
