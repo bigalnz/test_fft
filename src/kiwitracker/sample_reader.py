@@ -28,17 +28,14 @@ from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
                                           process_sample_new)
 
+import time
+import itertools
+import threading
+
+
 # tracemalloc.start()
 
 logger = logging.getLogger("KiwiTracker")
-
-async def swap_frequencies(config):
-    """Swap center and alternate frequency at a fixed interval."""
-    while True:
-        await asyncio.sleep(config.freq_change_interval)
-        config.center_freq, config.alternate_freq = config.alternate_freq, config.center_freq
-        print(f"[SWAP] center_freq = {config.center_freq}, alternate_freq = {config.alternate_freq}")
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -218,10 +215,6 @@ def main():
         carrier_freq=args.carrier,
         gps_module=gps_module,
     )
-
-    if sample_config.freq_change_interval > 0:
-        asyncio.create_task(swap_frequencies(sample_config))
-
 
     if args.infile is not None:
         # import cProfile
@@ -742,7 +735,6 @@ async def process_results(
         await q.put(res)
 
         queue_results.task_done()
-
 
 async def pipeline(
     process_config: list[ProcessConfig] | ProcessConfig,

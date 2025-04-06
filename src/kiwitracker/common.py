@@ -18,8 +18,17 @@ class SampleConfig:
     sample_rate: float = 1.024e6
     """Sample rate"""
 
-    center_freq: float = 160_270_968
+    center_freq: float = 160_425_000
     """Center frequency"""
+
+    alternate_freq: float = 160_725_000
+    """Center frequency to jump to when scan_interval given"""
+
+    alternate_freq_active: bool = False
+    """Boolean to track alt freq status"""
+
+    freq_change_interval: float = 0
+    """ Interval to change center freq in seconds"""
 
     read_size: int = 65536
     """Number of samples to read from the sdr in each iteration"""
@@ -46,6 +55,8 @@ class ProcessConfig:
     # carrier_freq: float = 160_708_253
     carrier_freq: float = 160_270_968
     # carrier_freq: float = 160_274_340
+    alternate_carrier_freq = 160_270_968
+    scanning_interval = 60
 
     """Center frequency of the carrier wave to process (in Hz)"""
 
