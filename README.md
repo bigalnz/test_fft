@@ -1,6 +1,6 @@
 # kiwitracker
 
-A project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
+A volunteer/non-profit philanthropic project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
 
 ## Background modes of transmitter
 
