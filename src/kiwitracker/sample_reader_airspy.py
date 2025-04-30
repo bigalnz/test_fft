@@ -19,14 +19,12 @@ class BufferAirspy:
     async def get(self, count):
         while True:
 
-            tmp = []
+            tmp = [await self.input_queue.get()]
+            self.input_queue.task_done()
 
-            if self.input_queue.empty():
-                await asyncio.sleep(0)
-            else:
-                while not self.input_queue.empty():
-                    tmp.append(await self.input_queue.get())
-                    self.input_queue.task_done()
+            while not self.input_queue.empty():
+                tmp.append(await self.input_queue.get())
+                self.input_queue.task_done()
 
             if tmp:
                 self.samples = np.concatenate((self.samples, *tmp))
