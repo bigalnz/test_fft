@@ -96,6 +96,14 @@ def main():
         choices=["rtl", "airspy", "dummy"],
         help="type of radio to be used (default: %(default)s), ignored if reading samples from disk.",
     )
+    p.add_argument(
+        "-ch",
+        "--channels",
+        default=["all"],
+        nargs="+",
+        dest="channels",
+        help="List of channels to process. If 'all' is specified, all channels are processed. (default: %(default)s)",
+    )
 
     s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
@@ -168,6 +176,22 @@ def main():
     args = p.parse_args()
 
     setup_logging(level=args.loglevel.upper())
+
+    # Define a lookup dictionary
+    channel_modes = {
+        "odd": list(range(1, 100, 2)),
+        "even": list(range(2, 101, 2)),
+        "all": list(range(1, 100, 1))
+    }
+
+    # If argschannels contains one of the known modes, replace it
+    if isinstance(args.channels, list) and len(args.channels) == 1 and isinstance(args.channels[0], str):
+        mode = args.channels[0]
+        args.channels = channel_modes.get(mode, [])
+
+    # Otherwise, assume it's already a custom list of integers
+    print(args.channels)
+
 
     if args.deletedb:
         db_filename = construct_db_connection_string(db_file=args.db).removeprefix("sqlite:///")
