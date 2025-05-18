@@ -390,7 +390,7 @@ async def process_sample_new(
                 nf = noise_floors_per_channel[channel_no]
 
             nf.append(noise_floor(tk))
-            threshold = (sum(nf) / len(nf)) * 1.5
+            threshold = (sum(nf) / len(nf)) * 1.8 # was 1.5
 
             """ logger.debug(
                 f"[{channel_no:>3}/{channel_str:>10}] Computed {threshold=}"
