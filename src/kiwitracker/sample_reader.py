@@ -188,6 +188,7 @@ def main():
     if isinstance(args.channels, list) and len(args.channels) == 1 and isinstance(args.channels[0], str):
         mode = args.channels[0]
         args.channels = channel_modes.get(mode, [])
+        args.channels = np.array(args.channels)
 
     # Otherwise, assume it's already a custom list of integers
     print(args.channels)
@@ -232,6 +233,7 @@ def main():
         gain=args.gain,
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
+        channels_to_process=args.channels,
     )
 
     process_config = ProcessConfig(

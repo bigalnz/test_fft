@@ -225,6 +225,17 @@ def index_of(arr: np.array, v):
     return next((idx[0] for idx, val in np.ndenumerate(arr) if val == v), -1)
 
 
+# Function to determine valid FFT indices that fall within any of the desired channel bands
+def get_valid_fft_indices(f, f0, channel_bandwidth_khz=0.01):
+    valid_indices = set()
+    for center_frequency in np.nditer(f):
+        lower_bound = center_frequency - channel_bandwidth_khz / 2
+        upper_bound = center_frequency + channel_bandwidth_khz / 2
+        # Find all indices where the frequency falls within the channel bounds
+        matching_indices = np.where((f >= lower_bound) & (f < upper_bound))[0]
+        valid_indices.update(matching_indices)
+    return valid_indices
+
 # kiwitracker --center 160425000 --scan 0 -s 768000 --no-use-gps --loglevel debug -f data/sept24.fc32
 
 # new method according:
@@ -257,6 +268,7 @@ async def process_sample_new(
     f0 = int(pc.sample_config.center_freq)
     # Fs = 768e3  # Sampling rate
     Fs = int(pc.sample_config.sample_rate)
+    
 
     N_fft = 1024  # Number of FFT channels
     N_time_PSD = 250
@@ -264,6 +276,9 @@ async def process_sample_new(
 
     # Generate array of channel frequencies
     f = (np.fft.fftshift(np.fft.fftfreq(N_fft, 1 / Fs)) + f0) / 1e6
+
+    # Get the set of valid FFT indices for the desired channels
+    valid_fft_indices = get_valid_fft_indices(f, f0)
 
     # Time tag each sample
     # t = np.arange(pc.num_samples_to_process) / Fs

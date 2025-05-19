@@ -45,6 +45,9 @@ class SampleConfig:
     scan_interval: int | None = None
     """Scan interval in minutes"""
 
+    channels_to_process: np.ndarray = field(default_factory=lambda: np.array([]))
+    """List of channels to process"""
+
 
 @dataclass
 class ProcessConfig:
