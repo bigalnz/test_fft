@@ -177,23 +177,24 @@ def main():
 
     setup_logging(level=args.loglevel.upper())
 
-    # Define a lookup dictionary
-    channel_modes = {
-        "odd": list(range(1, 100, 2)),
-        "even": list(range(2, 101, 2)),
-        "all": list(range(1, 100, 1))
-    }
-
-    # If argschannels contains one of the known modes, replace it
-    if isinstance(args.channels, list) and len(args.channels) == 1 and isinstance(args.channels[0], str):
-        mode = args.channels[0]
-        args.channels = channel_modes.get(mode, [])
-        args.channels = np.array(args.channels)
-
-    # Otherwise, assume it's already a custom list of integers
-    print(args.channels)
-
-
+    def parse_channels(channels):
+        if len(channels) == 1:
+            keyword = channels[0].lower()
+            if keyword == "odd":
+                return list(range(1, 100, 2))
+            elif keyword == "even":
+                return list(range(2, 101, 2))
+            elif keyword == "all":
+                return list(range(1, 101))
+        
+        # Otherwise, try to convert each item to an int
+        try:
+            return [int(ch) for ch in channels]
+        except ValueError:
+            raise argparse.ArgumentTypeError("Channels must be integers or one of: odd, even, all")
+    
+    args.channels = parse_channels(args.channels)
+    
     if args.deletedb:
         db_filename = construct_db_connection_string(db_file=args.db).removeprefix("sqlite:///")
 

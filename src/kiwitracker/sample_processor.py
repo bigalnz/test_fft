@@ -53,6 +53,11 @@ def fft_freqs_array(sample_rate: int, fft_size: int) -> np.ndarray:
 #     return int(round(abs(carrier_freq - 160.425) / 0.01))
 
 
+def channel_to_freq(freq: int) -> float:
+    """Channel Number from Freq"""
+    return 160.120 + (freq * 0.01)
+
+
 def channel_new(carrier_freq: float) -> int:
     """Channel Number from Freq"""
     return math.floor((carrier_freq - 160.115) / 0.01)
@@ -226,9 +231,9 @@ def index_of(arr: np.array, v):
 
 
 # Function to determine valid FFT indices that fall within any of the desired channel bands
-def get_valid_fft_indices(f, f0, channel_bandwidth_khz=0.01):
+def get_valid_fft_indices(f, freqs_to_process, channel_bandwidth_khz=0.01):
     valid_indices = set()
-    for center_frequency in np.nditer(f):
+    for center_frequency in freqs_to_process:
         lower_bound = center_frequency - channel_bandwidth_khz / 2
         upper_bound = center_frequency + channel_bandwidth_khz / 2
         # Find all indices where the frequency falls within the channel bounds
@@ -278,7 +283,8 @@ async def process_sample_new(
     f = (np.fft.fftshift(np.fft.fftfreq(N_fft, 1 / Fs)) + f0) / 1e6
 
     # Get the set of valid FFT indices for the desired channels
-    valid_fft_indices = get_valid_fft_indices(f, f0)
+    freqs_to_process = [channel_to_freq(ch) for ch in pc.sample_config.channels_to_process]
+    valid_fft_indices = get_valid_fft_indices(f, freqs_to_process)
 
     # Time tag each sample
     # t = np.arange(pc.num_samples_to_process) / Fs
@@ -353,11 +359,9 @@ async def process_sample_new(
         max_peaks = [v[0] for k, v in grouped_peaks.items() if len(v) == 1 and (0 <= k <= 99)]
 
         # Filter max peaks to remove anything not in valid_indicies
-        for peak in max_peaks:
-            if p[peak] not in valid_fft_indices:
-                max_peaks.remove(p[peak])
-        
-        print(f"max_peaks: {max_peaks}")
+        # Filter only peaks where p[peak] is in valid_fft_indices
+        max_peaks = [peak for peak in max_peaks if p[peak] in valid_fft_indices]
+        # print(f"max_peaks: {max_peaks}")
 
 
 
