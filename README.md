@@ -1,6 +1,10 @@
-# kiwitracker
+# Kiwi Tracker
 
-A volunteer/non-profit philanthropic project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
+A volunteer/non-profit philanthropic python project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
+
+## Hardware
+
+The python code can be run on any enviroment, but for remote monitoring or as a drone payload a Raspi will suffice. The SDR (Software Defined Radio) that works best is the Airspy HF+ https://airspy.com/airspy-hf-plus/
 
 ## Background modes of transmitter
 
