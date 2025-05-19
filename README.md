@@ -155,7 +155,7 @@ Sample output:
 2025-05-20 10:54:33,678 - KiwiTracker - sample_processor.py - INFO - [ 62/   160.737] BPM: 20.07 | POS: -36.8807 174.924 | dBFS: -14 |
 ```
 
-This shows signals detected on channel 19 (i.e. at frequency 160.311 Mhz), 4, 5, 43 etc. Fast Telemtry (FT) signals (every 5 beeps) are attempted to be decoded `Nesting-46-46` which decodes to:
+This sample output shows signals detected on channel 19 (i.e. at frequency 160.311 Mhz), 4, 5, 43 etc. Fast Telemtry (FT) signals (every 5 beeps) are attempted to be decoded `Nesting-46-46` which decodes to:
 Mode: `Not-Nesting`
 Days Since State Change: `24`
 Weeks Batt Life Remaining: `24`
