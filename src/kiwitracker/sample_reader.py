@@ -28,10 +28,14 @@ from kiwitracker.sample_processor import (chick_timer, fast_telemetry,
                                           find_beep_frequencies,
                                           process_sample_new)
 
+import time
+import itertools
+import threading
+
+
 # tracemalloc.start()
 
 logger = logging.getLogger("KiwiTracker")
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -92,6 +96,14 @@ def main():
         choices=["rtl", "airspy", "dummy"],
         help="type of radio to be used (default: %(default)s), ignored if reading samples from disk.",
     )
+    p.add_argument(
+        "-ch",
+        "--channels",
+        default=["all"],
+        nargs="+",
+        dest="channels",
+        help="List of channels to process. If 'all' is specified, all channels are processed. (default: %(default)s)",
+    )
 
     s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
@@ -116,6 +128,20 @@ def main():
         type=float,
         default=SampleConfig.center_freq,
         help="SDR center frequency (default: %(default)s)",
+    )
+    s_group.add_argument(
+        "--alternate-freq",
+        dest="alternate_freq",
+        type=float,
+        default=SampleConfig.alternate_freq,
+        help="SDR alternate center frequency (default: %(default)s)",
+    )
+    s_group.add_argument(
+        "--freq-change-interval",
+        dest="freq_change_interval",
+        type=float,
+        default=SampleConfig.freq_change_interval,
+        help="SDR scan interval to change center frequancy for Airspy HF (in seconds) (default: %(default)s)",
     )
     s_group.add_argument(
         "-g",
@@ -151,6 +177,24 @@ def main():
 
     setup_logging(level=args.loglevel.upper())
 
+    def parse_channels(channels):
+        if len(channels) == 1:
+            keyword = channels[0].lower()
+            if keyword == "odd":
+                return list(range(1, 100, 2))
+            elif keyword == "even":
+                return list(range(2, 101, 2))
+            elif keyword == "all":
+                return list(range(1, 101))
+        
+        # Otherwise, try to convert each item to an int
+        try:
+            return [int(ch) for ch in channels]
+        except ValueError:
+            raise argparse.ArgumentTypeError("Channels must be integers or one of: odd, even, all")
+    
+    args.channels = parse_channels(args.channels)
+    
     if args.deletedb:
         db_filename = construct_db_connection_string(db_file=args.db).removeprefix("sqlite:///")
 
@@ -185,10 +229,12 @@ def main():
     sample_config = SampleConfig(
         sample_rate=args.sample_rate,
         center_freq=args.center_freq,
+        alternate_freq=args.alternate_freq,
+        freq_change_interval=args.freq_change_interval,
         gain=args.gain,
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
-        scan_interval=args.scan,
+        channels_to_process=args.channels,
     )
 
     process_config = ProcessConfig(
@@ -716,7 +762,6 @@ async def process_results(
         await q.put(res)
 
         queue_results.task_done()
-
 
 async def pipeline(
     process_config: list[ProcessConfig] | ProcessConfig,

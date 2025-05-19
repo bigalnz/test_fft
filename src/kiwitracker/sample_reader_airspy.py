@@ -45,6 +45,7 @@ class SampleReaderAirspy:
         self.buffer = None
         self.device_handle = None
         self.aio_loop = None
+        self.last_updated = 0
 
     async def open_stream(self):
         self.aio_loop = asyncio.get_running_loop()
@@ -54,6 +55,14 @@ class SampleReaderAirspy:
     async def __aenter__(self):
 
         def sync_with_main_thread(complex_data):
+
+            if time.time() - self.last_updated > 10: # say we are swapping every 1000ms
+                print(f" ********************** Changing Freq **********************")
+                self.sc.center_freq, self.sc.alternate_freq = self.sc.alternate_freq, self.sc.center_freq  # swap
+                status = airspy.set_freq(self.device_handle, self.sc.center_freq)
+                self.last_updated = time.time()
+                print(f"{self.last_updated}")
+            self.aio_loop.call_soon_threadsafe(self.buffer.input_queue.put_nowait, complex_data.flatten())
             # logger.debug(f"{complex_data} received!")
 
             # future = asyncio.run_coroutine_threadsafe(self.buffer.input_queue.put(complex_data.ravel()), self.aio_loop)
