@@ -40,7 +40,7 @@ Full manual http://wildtech.co.nz/downloads/NiB%20CT%20V3.4.pdf
       --center 16042500 will be the center freq for the SDR
       --center freq1,freq2,interval in seconds
       --center 160425000,160725000,3600 would mean swap center frequencies every 3600 seconds
-- [ ] Add option to provide list of channels to scan, i.e. --channel-list [57, 67, 85, 1, 9] 
+- [x] Add option to provide list of channels to scan, i.e. --channel-list [57, 67, 85, 1, 9] 
 - [x] Add option to set an array of carriers --carrier [160707800, 160338000, .... ] (max 6 freqs)
 - [x] Add option to support both RTLSDR and SDRPlay devices "--radio airspy" , "--radio rtl"
 - [x] Add option to log signals to MySQL
@@ -117,6 +117,7 @@ options:
   --no-use-gps          Set this flag to not use GPS module
   --radio [{rtl,airspy}]
                         type of radio to be used (default: rtl), ignored if reading samples from disk. Airspy has max sample rate of 768000. Needs to be used with -s 768000.
+  -ch, --channels       Provide arguments to process only certain channels. Valid options are all, odd, even or custom list, i.e. "--channels 19 55 83"
 
 Sampling:
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
