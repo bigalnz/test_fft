@@ -342,7 +342,6 @@ async def process_sample_new(
         num_of_peaks = min(20, len(p))
         max_peaks = np.argpartition(prom, -num_of_peaks)[-num_of_peaks:] #get top 20 or len(p) peaks
 
-
         # filter `max_peaks`:
         # 1.) if for the channel number there are more than one frequency, discard all frequencies for that channel
         # 2.) any channel less than 0 or any channel that is over 99 - discard
@@ -352,6 +351,15 @@ async def process_sample_new(
             channel_no = channel_new(f[p[peak]])
             grouped_peaks.setdefault(channel_no, []).append(peak)
         max_peaks = [v[0] for k, v in grouped_peaks.items() if len(v) == 1 and (0 <= k <= 99)]
+
+        # Filter max peaks to remove anything not in valid_indicies
+        for peak in max_peaks:
+            if p[peak] not in valid_fft_indices:
+                max_peaks.remove(p[peak])
+        
+        print(f"max_peaks: {max_peaks}")
+
+
 
         # Extract the time series for each channel identified
         #t_kiwis = [D[:, idx] for idx in p]
