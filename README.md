@@ -1,6 +1,6 @@
 # Kiwi Tracker
 
-A volunteer/non-profit philanthropic python project to log to standard console the BPM of a Chick Timer (CT) for Kiwi.
+A volunteer/non-profit philanthropic python project to log to standard console and database the BPM of a Chick Timer (CT) for Kiwi.
 
 ## Hardware
 
