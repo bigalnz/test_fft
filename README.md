@@ -135,3 +135,26 @@ Processing:
   --carrier [CARRIER]   Carrier frequency to process (default: None)
 
 ```
+
+Sample output:
+
+2025-05-20 10:54:32,989 - KiwiTracker - sample_processor.py - INFO - [ 61/ 160.72575] BPM: 28.72 | POS: -36.8807 174.924 | dBFS: -13 |
+2025-05-20 10:54:33,013 - KiwiTracker - sample_processor.py - INFO - [  4/ 160.16175] BPM: 28.36 | POS: -36.8807 174.924 | dBFS: -12 |
+2025-05-20 10:54:33,036 - KiwiTracker - sample_processor.py - INFO - [  5/ 160.17075] BPM: 28.77 | POS: -36.8807 174.924 | dBFS: -12 |
+2025-05-20 10:54:33,129 - KiwiTracker - sample_processor.py - INFO - [ 43/   160.548] BPM: 36.26 | POS: -36.8807 174.924 | dBFS: -10 |
+2025-05-20 10:54:33,220 - KiwiTracker - sample_processor.py - INFO - [ 19/   160.311] BPM: 14.46 | POS: -36.8807 174.924 | dBFS: -12 |
+2025-05-20 10:54:33,345 - KiwiTracker - sample_processor.py - INFO - [ 19/   160.311] BPM: 29.13 | POS: -36.8807 174.924 | dBFS: -12 |
+2025-05-20 10:59:26,701 - KiwiTracker - sample_processor.py - INFO - FT [ 19/   160.311] state found Not Nesting-46-46
+2025-05-20 10:54:33,490 - KiwiTracker - sample_processor.py - INFO - [ 19/   160.311] BPM: 28.70 | POS: -36.8807 174.924 | dBFS: -12 |
+2025-05-20 10:54:33,645 - KiwiTracker - sample_processor.py - INFO - [ 19/   160.311] BPM: 29.01 | POS: -36.8807 174.924 | dBFS: -11 |
+2025-05-20 10:54:33,673 - KiwiTracker - sample_processor.py - INFO - [ 14/   160.263] BPM: 34.51 | POS: -36.8807 174.924 | dBFS: -17 |
+2025-05-20 10:54:33,678 - KiwiTracker - sample_processor.py - INFO - [ 62/   160.737] BPM: 20.07 | POS: -36.8807 174.924 | dBFS: -14 |
+
+This shows signals detected on channel 19 (i.e. at frequency 160.311 Mhz), 4, 5, 43 etc. Fast Telemtry (FT) signals (every 5 beeps) are attempted to be decoded `Nesting-46-46` which decodes to:
+Mode: `Not-Nesting`
+Days Since State Change: `24`
+Weeks Batt Life Remaining: `24`
+
+
+
+
