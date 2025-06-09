@@ -20,6 +20,7 @@ class BPM(Base):
     snr = Column(Float, nullable=False)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
+    location = Column(String, nullable=False)
 
 
 class ChickTimerResult(Base):

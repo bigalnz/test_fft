@@ -480,6 +480,7 @@ async def process_sample_new(
                     SNR=-1,
                     latitude=latitude,
                     longitude=longitude,
+                    location=pc.sample_config.location,
                 )
 
                 logger.info(
@@ -744,6 +745,7 @@ async def chick_timer(
         dbfs_mean = statistics.mean(dbfs)
 
         lat, lon = pc.gps_module.get_current()
+    
 
         r = CTResult(
             channel=ch,

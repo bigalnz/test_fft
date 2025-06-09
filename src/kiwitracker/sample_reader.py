@@ -104,6 +104,14 @@ def main():
         dest="channels",
         help="List of channels to process. If 'all' is specified, all channels are processed. (default: %(default)s)",
     )
+    p.add_argument(
+        "-loc",
+        "--location",
+        default="undefined",
+        type=str,
+        dest="location",
+        help="A string definining deployment locality. (default: %(default)s)",
+    )
 
     s_group = p.add_argument_group("Sampling")
     s_group.add_argument(
@@ -235,6 +243,7 @@ def main():
         bias_tee_enable=args.bias_tee,
         read_size=args.chunk_size,
         channels_to_process=args.channels,
+        location=args.location,
     )
 
     process_config = ProcessConfig(

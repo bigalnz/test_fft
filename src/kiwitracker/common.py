@@ -39,7 +39,7 @@ class SampleConfig:
     bias_tee_enable: bool = False
     """Enable bias tee"""
 
-    location: str = "Ponui"
+    location: str = "undefined"
     """Set population location"""
 
     scan_interval: int | None = None
@@ -107,6 +107,7 @@ class ProcessResult:
     SNR: float
     latitude: float
     longitude: float
+    location: str
 
 
 @dataclass
